@@ -1,0 +1,104 @@
+version: "3.9"
+
+services:
+  # ==================== MAIN ====================
+  postgres-main:
+    image: postgres:15
+    container_name: urbantracker-postgres-main
+    restart: always
+    env_file:
+      - .env.main
+    ports:
+      - "5432:5432"
+    networks:
+      - network_main
+    volumes:
+      - postgres_data_main:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # ==================== DEVELOP ====================
+  postgres-develop:
+    image: postgres:15
+    container_name: urbantracker-postgres-develop
+    restart: always
+    env_file:
+      - .env.develop
+    ports:
+      - "5433:5432"
+    networks:
+      - network_develop
+    volumes:
+      - postgres_data_develop:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # ==================== QA ====================
+  postgres-qa:
+    image: postgres:15
+    container_name: urbantracker-postgres-qa
+    restart: always
+    env_file:
+      - .env.qa
+    ports:
+      - "5434:5432"
+    networks:
+      - network_qa
+    volumes:
+      - postgres_data_qa:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # ==================== STAGING ====================
+  postgres-staging:
+    image: postgres:15
+    container_name: urbantracker-postgres-staging
+    restart: always
+    env_file:
+      - .env.staging
+    ports:
+      - "5435:5432"
+    networks:
+      - network_staging
+    volumes:
+      - postgres_data_staging:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+# ==================== VOLÚMENES ====================
+volumes:
+  postgres_data_main:
+    driver: local
+  postgres_data_develop:
+    driver: local
+  postgres_data_qa:
+    driver: local
+  postgres_data_staging:
+    driver: local
+
+# ==================== REDES ====================
+networks:
+  network_main:
+    driver: bridge
+  network_develop:
+    driver: bridge
+  network_qa:
+    driver: bridge
+  network_staging:
+    driver: bridge

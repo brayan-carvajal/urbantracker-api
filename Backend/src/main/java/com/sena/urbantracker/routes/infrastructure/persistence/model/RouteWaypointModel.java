@@ -2,7 +2,7 @@ package com.sena.urbantracker.routes.infrastructure.persistence.model;
 
 import com.sena.urbantracker.routes.domain.valueobject.WaypointDestineType;
 import com.sena.urbantracker.routes.domain.valueobject.WaypointType;
-import com.sena.urbantracker.shared.application.dto.BaseEntity;
+import com.sena.urbantracker.shared.infrastructure.persistence.model.BaseEntity;
 import jakarta.persistence.*;
 import lombok.*;
 import lombok.experimental.SuperBuilder;
