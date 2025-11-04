@@ -16,9 +16,10 @@ pipeline {
     stage('Build & Test') {
       steps {
         script {
-          // Ejecuta Maven dentro de un contenedor con Java + Maven preinstalados
           docker.image('maven:3.9-eclipse-temurin-17').inside {
-            sh 'mvn -B -DskipTests=false test'
+            dir('Backend') {
+              sh 'mvn -B -DskipTests=false test'
+            }
           }
         }
       }
@@ -28,7 +29,9 @@ pipeline {
       steps {
         script {
           docker.image('maven:3.9-eclipse-temurin-17').inside {
-            sh 'mvn -B -DskipTests package'
+            dir('Backend') {
+              sh 'mvn -B -DskipTests package'
+            }
           }
         }
       }
@@ -39,7 +42,7 @@ pipeline {
         withCredentials([usernamePassword(credentialsId: 'docker-registry-creds', usernameVariable: 'USER', passwordVariable: 'PASS')]) {
           sh """
             echo "$PASS" | docker login ${REGISTRY} -u "$USER" --password-stdin
-            docker build -t ${IMAGE}:${GIT_COMMIT} .
+            docker build -t ${IMAGE}:${GIT_COMMIT} Backend/
             docker push ${IMAGE}:${GIT_COMMIT}
           """
         }
@@ -49,7 +52,6 @@ pipeline {
     stage('Move Tag by branch') {
       steps {
         script {
-          // Etiqueta móvil por rama → ambiente
           def envTag = (env.BRANCH_NAME == 'develop') ? 'dev'
                        : (env.BRANCH_NAME.startsWith('release/')) ? 'qa'
                        : (env.BRANCH_NAME == 'staging') ? 'staging'
