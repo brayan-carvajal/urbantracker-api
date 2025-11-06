@@ -13,7 +13,7 @@
       branches: [[name: '*/develop']],
       userRemoteConfigs: [[
         url: 'https://github.com/brayan-carvajal/urbantracker-api.git',
-        credentialsId: 'github-jenkins'
+        credentialsId: 'docker-registry-creds'
       ]],
       extensions: [[$class: 'WipeWorkspace']]
     ])
