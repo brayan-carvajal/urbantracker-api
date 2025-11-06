@@ -98,7 +98,7 @@ pipeline {
               cp ${JARFILE} Devops/develop/app.jar
             '''
             // construir
-            sh "docker build -t ${env.IMAGE_TAG} -f Devops/develop/Dockerfile.app Devops/develop"
+            sh "docker build --no-cache -t ${env.IMAGE_TAG} -f Devops/develop/Dockerfile.app Devops/develop"
             echo "Imagen creada: ${env.IMAGE_TAG}"
           }
         }
@@ -130,7 +130,7 @@ pipeline {
                 echo "BACKEND_IMAGE=${env.IMAGE_TAG}" >> ${env.ENV_FILE}.tmp
                 mv ${env.ENV_FILE}.tmp ${env.ENV_FILE}
                 # levantar solo servicio de DB si compose lo define (puede depender de tu compose)
-                docker-compose -f ${env.COMPOSE_FILE} --env-file ${env.ENV_FILE} up -d db || docker-compose -f ${env.COMPOSE_FILE} --env-file ${env.ENV_FILE} up -d
+                docker compose -f ${env.COMPOSE_FILE} --env-file ${env.ENV_FILE} up -d db || docker compose -f ${env.COMPOSE_FILE} --env-file ${env.ENV_FILE} up -d
               """
             } else {
               echo "⚠️ No existe ${env.COMPOSE_FILE} — saltando DB local"
@@ -166,7 +166,7 @@ pipeline {
               echo "BACKEND_IMAGE=${env.IMAGE_TAG}" >> ${env.ENV_FILE}.tmp
               mv ${env.ENV_FILE}.tmp ${env.ENV_FILE}
 
-              docker-compose -f ${env.COMPOSE_FILE} --env-file ${env.ENV_FILE} up -d --build --remove-orphans
+              docker compose -f ${env.COMPOSE_FILE} --env-file ${env.ENV_FILE} up -d --build --remove-orphans
             """
           }
         }
@@ -216,7 +216,7 @@ pipeline {
         if (env.ENVIRONMENT == 'develop') {
           echo "🧹 Limpieza: docker compose down (develop)"
           dir("${env.ENV_DIR}") {
-            sh "docker-compose -f ${env.COMPOSE_FILE} --env-file ${env.ENV_FILE} down --volumes --remove-orphans || true"
+            sh "docker compose -f ${env.COMPOSE_FILE} --env-file ${env.ENV_FILE} down --volumes --remove-orphans || true"
           }
           sh "docker rmi ${env.IMAGE_TAG} || true"
           sh "docker network rm ${NETWORK_PREFIX}-${env.ENVIRONMENT} || true"
