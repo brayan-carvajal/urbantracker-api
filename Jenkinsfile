@@ -144,26 +144,35 @@ pipeline {
           } else {
             echo "🚀 Desplegando backend con Docker directo (${env.ENVIRONMENT})"
             // No usar docker compose, deployment directo con Docker
-            sh '''
-              # Verificar y liberar puerto 8080
-              echo "🔍 Verificando puerto 8080..."
+            script {
+              echo "🚀 Desplegando backend con Docker directo (${env.ENVIRONMENT})"
               
-              # Detener contenedor anterior si existe
-              docker stop urbantracker-backend-develop || true
-              docker rm urbantracker-backend-develop || true
+              // Configurar variables
+              def networkName = "${NETWORK_PREFIX}-${env.ENVIRONMENT}"
+              def imageTag = env.IMAGE_TAG
               
-              # Esperar un momento para que el puerto se libere
-              sleep 3
-              
-              # Ejecutar contenedor backend con la imagen
-              echo "🚀 Iniciando contenedor backend..."
-              docker run -d \\
-                --name urbantracker-backend-develop \\
-                --network ${NETWORK_PREFIX}-${env.ENVIRONMENT} \\
-                -p 8080:8080 \\
-                --restart unless-stopped \\
-                ${env.IMAGE_TAG}
-            '''
+              // Script shell simplificado
+              sh """
+                #!/bin/bash
+                echo "🔍 Verificando puerto 8080..."
+                
+                # Detener contenedor anterior si existe
+                docker stop urbantracker-backend-develop || true
+                docker rm urbantracker-backend-develop || true
+                
+                # Esperar un momento para que el puerto se libere
+                sleep 5
+                
+                # Ejecutar contenedor backend con la imagen
+                echo "🚀 Iniciando contenedor backend..."
+                docker run -d \\
+                  --name urbantracker-backend-develop \\
+                  --network ${networkName} \\
+                  -p 8080:8080 \\
+                  --restart unless-stopped \\
+                  ${imageTag}
+              """
+            }
           }
         }
       }
