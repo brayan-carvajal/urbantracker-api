@@ -40,9 +40,9 @@ pipeline {
             fi
             echo "ENVIRONMENT=$ENVIRONMENT" > env.properties
             # Rutas relativas dentro del repo (similares a tu ejemplo)
-            echo "ENV_DIR=Backend/devops/$ENVIRONMENT" >> env.properties
-            echo "COMPOSE_FILE=Backend/devops/$ENVIRONMENT/docker-compose.yml" >> env.properties
-            echo "ENV_FILE=Backend/devops/$ENVIRONMENT/.env" >> env.properties
+            echo "ENV_DIR=Backend/Devops/$ENVIRONMENT" >> env.properties
+            echo "COMPOSE_FILE=Backend/Devops/$ENVIRONMENT/docker-compose.yml" >> env.properties
+            echo "ENV_FILE=Backend/Devops/$ENVIRONMENT/.env" >> env.properties
           '''
           def props = readProperties file: 'env.properties'
           env.ENVIRONMENT = props['ENVIRONMENT']
