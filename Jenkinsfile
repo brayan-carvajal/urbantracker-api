@@ -142,8 +142,6 @@ pipeline {
             // withCredentials([...]) { sh """ ssh -i $SSH_KEY ... """ }
             echo "Implementa SSH deploy aquí si lo necesitas"
           } else {
-            echo "🚀 Desplegando backend con Docker directo (${env.ENVIRONMENT})"
-            // No usar docker compose, deployment directo con Docker
             script {
               echo "🚀 Desplegando backend con Docker directo (${env.ENVIRONMENT})"
               
@@ -151,26 +149,34 @@ pipeline {
               def networkName = "${NETWORK_PREFIX}-${env.ENVIRONMENT}"
               def imageTag = env.IMAGE_TAG
               
-              // Script shell simplificado
+              // Limpieza agresiva de puerto 8080
               sh """
-                #!/bin/bash
-                echo "🔍 Verificando puerto 8080..."
+                echo "🔍 Limpiando puerto 8080..."
                 
-                # Detener contenedor anterior si existe
-                docker stop urbantracker-backend-develop || true
-                docker rm urbantracker-backend-develop || true
+                # Detener TODOS los contenedores que usen puerto 8080
+                docker ps -q | while read container_id; do
+                  if docker port \$container_id 2>/dev/null | grep -q '8080'; then
+                    echo "🛑 Deteniendo contenedor \$container_id que usa puerto 8080"
+                    docker stop \$container_id || true
+                    docker rm \$container_id || true
+                  fi
+                done
                 
-                # Esperar un momento para que el puerto se libere
-                sleep 5
-                
-                # Ejecutar contenedor backend con la imagen
+                # Esperar liberación del puerto
+                sleep 10
+              """
+              
+              // Ejecutar contenedor backend
+              sh """
                 echo "🚀 Iniciando contenedor backend..."
                 docker run -d \\
                   --name urbantracker-backend-develop \\
                   --network ${networkName} \\
-                  -p 8080:8080 \\
+                  -p 8081:8081 \\
                   --restart unless-stopped \\
                   ${imageTag}
+                
+                echo "✅ Contenedor backend iniciado"
               """
             }
           }
