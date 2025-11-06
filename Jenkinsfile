@@ -149,34 +149,27 @@ pipeline {
               def networkName = "${NETWORK_PREFIX}-${env.ENVIRONMENT}"
               def imageTag = env.IMAGE_TAG
               
-              // Limpieza agresiva de puerto 8080
-              sh """
-                echo "🔍 Limpiando puerto 8080..."
-                
-                # Detener TODOS los contenedores que usen puerto 8080
-                docker ps -q | while read container_id; do
-                  if docker port \$container_id 2>/dev/null | grep -q '8080'; then
-                    echo "🛑 Deteniendo contenedor \$container_id que usa puerto 8080"
-                    docker stop \$container_id || true
-                    docker rm \$container_id || true
-                  fi
-                done
-                
-                # Esperar liberación del puerto
-                sleep 10
-              """
-              
               // Ejecutar contenedor backend
               sh """
-                echo "🚀 Iniciando contenedor backend..."
+                echo "🔍 Preparando despliegue..."
+                
+                # Detener contenedor anterior si existe
+                docker stop urbantracker-backend-develop || true
+                docker rm urbantracker-backend-develop || true
+                
+                # Esperar liberación
+                sleep 3
+                
+                # Ejecutar contenedor backend en puerto 8081 (host) -> 8080 (contenedor)
+                echo "🚀 Iniciando contenedor backend en puerto 8081..."
                 docker run -d \\
                   --name urbantracker-backend-develop \\
                   --network ${networkName} \\
-                  -p 8081:8081 \\
+                  -p 8081:8080 \\
                   --restart unless-stopped \\
                   ${imageTag}
                 
-                echo "✅ Contenedor backend iniciado"
+                echo "✅ Contenedor backend iniciado en puerto 8081"
               """
             }
           }
