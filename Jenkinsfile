@@ -1,6 +1,11 @@
 pipeline {
   agent any
 
+  environment {
+    REGISTRY = "registry.com"
+    IMAGE    = "${REGISTRY}/premium/back"
+  }
+
   stages {
     stage('Checkout') {
       steps {
@@ -8,7 +13,7 @@ pipeline {
           branches: [[name: '*/develop']],
           userRemoteConfigs: [[
             url: 'https://github.com/brayan-carvajal/urbantracker-api.git',
-            credentialsId: 'docker-registry-creds'
+            credentialsId: 'docker-registry-creds' 
           ]],
           extensions: [[$class: 'WipeWorkspace']]
         ])
@@ -16,27 +21,23 @@ pipeline {
     }
 
     stage('Build Backend') {
+      agent { docker { image 'maven:3.9.4-eclipse-temurin-17' } }
       steps {
         dir('Backend') {
-          docker.image('maven:3.9.4-eclipse-temurin-17').inside {
-            sh 'mvn clean package -DskipTests'
-          }
+          sh 'mvn -B clean package -DskipTests'
         }
       }
     }
 
     stage('Run Backend') {
+      agent { docker { image 'maven:3.9.4-eclipse-temurin-17' } }
       steps {
         dir('Backend') {
           script {
-            // Busca el JAR generado automáticamente
-            def jarFile = sh(script: "ls target/*.jar | head -n 1", returnStdout: true).trim()
-            echo "Ejecutando aplicación: ${jarFile}"
-
-            // Ejecuta el backend dentro del contenedor Maven
-            docker.image('maven:3.9.4-eclipse-temurin-17').inside {
-              sh "java -jar ${jarFile} & sleep 10 && curl -f http://localhost:8080 || true"
-            }
+            def jar = sh(script: "ls target/*.jar | head -n 1", returnStdout: true).trim()
+            echo "Jar encontrado: ${jar}"
+            // Ejecuta en primer plano para que Jenkins muestre los logs durante el job.
+            sh "java -jar ${jar}"
           }
         }
       }
