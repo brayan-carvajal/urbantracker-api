@@ -6,7 +6,10 @@ pipeline {
     COMPOSE_FILE = 'Backend/Devops/docker-compose.yml'
     DOCKERFILE_PATH = 'Backend/Devops/Dockerfile.app'
     DOCKER_IMAGE_NAME = 'backend-develop:latest'
-  }
+    IMAGE_BASE = 'backend'              
+    NETWORK_PREFIX = 'myproject-net'    
+}
+
 
   stages {
 
