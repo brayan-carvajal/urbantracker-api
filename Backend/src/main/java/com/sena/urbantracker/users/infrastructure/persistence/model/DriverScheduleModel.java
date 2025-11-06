@@ -1,12 +1,9 @@
-package com.sena.urbantracker.routes.infrastructure.persistence.model;
+package com.sena.urbantracker.users.infrastructure.persistence.model;
 
-import com.sena.urbantracker.routes.domain.valueobject.DayOfWeekType;
 import com.sena.urbantracker.shared.infrastructure.persistence.model.BaseEntity;
 import jakarta.persistence.*;
 import lombok.*;
 import lombok.experimental.SuperBuilder;
-import jakarta.persistence.Enumerated;
-import jakarta.persistence.EnumType;
 
 import java.sql.Time;
 
@@ -14,13 +11,14 @@ import java.sql.Time;
 @Entity
 @SuperBuilder
 @NoArgsConstructor
+@AllArgsConstructor
 @EqualsAndHashCode(callSuper = true)
-@Table(name = "route_schedule", schema = "routes")
-public class RouteScheduleModel extends BaseEntity {
+@Table(name = "driver_schedule", schema = "users")
+public class DriverScheduleModel extends BaseEntity {
 
     @ManyToOne
-    @JoinColumn(name = "route_id", nullable = false)
-    private RouteModel route;
+    @JoinColumn(name = "driver_id", nullable = false)
+    private DriverModel driver;
 
     @Column(name = "day_of_week", nullable = false)
     private String dayOfWeek;

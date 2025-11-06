@@ -16,7 +16,6 @@ public class RouteScheduleMapper {
                 .dayOfWeek(entity.getDayOfWeek())
                 .startTime(entity.getStartTime())
                 .endTime(entity.getEndTime())
-                .active(entity.getActive())
                 .createdAt(entity.getCreatedAt())
                 .updatedAt(entity.getUpdatedAt())
                 .build();
@@ -29,7 +28,6 @@ public class RouteScheduleMapper {
                 .dayOfWeek(dto.getDayOfWeek())
                 .startTime(dto.getStartTime())
                 .endTime(dto.getEndTime())
-                .active(true)
                 .build();
     }
 }

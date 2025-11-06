@@ -6,6 +6,7 @@ public enum EntityType {
     VEHICLE_TYPE("Vehicle Type", "vehicleTypes"),
     VEHICLE_ASSIGMENT("Vehicle Assigment", "vehicleAssigments"),
     DRIVER("Driver", "drivers"),
+    DRIVER_SCHEDULE("Driver Schedule", "driverSchedules"),
     COMPANY("Company", "companies"),
     IDENTIFICATION_TYPE("Identification Type", "identificationTypes"),
     USER_IDENTIFICATION("User Identification", "userIdentifications"),

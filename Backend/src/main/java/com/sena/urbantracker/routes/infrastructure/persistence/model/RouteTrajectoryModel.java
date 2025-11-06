@@ -1,7 +1,7 @@
 package com.sena.urbantracker.routes.infrastructure.persistence.model;
 
 import com.sena.urbantracker.routes.domain.valueobject.TrajectoryStatusType;
-import com.sena.urbantracker.shared.application.dto.BaseEntity;
+import com.sena.urbantracker.shared.infrastructure.persistence.model.BaseEntity;
 import com.sena.urbantracker.vehicles.infrastructure.persistence.model.VehicleModel;
 import jakarta.persistence.*;
 import lombok.*;
