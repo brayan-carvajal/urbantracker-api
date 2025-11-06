@@ -144,7 +144,7 @@ pipeline {
           } else {
             echo "🚀 Desplegando backend con Docker directo (${env.ENVIRONMENT})"
             // No usar docker compose, deployment directo con Docker
-            sh """
+            sh '''
               # Verificar y liberar puerto 8080
               echo "🔍 Verificando puerto 8080..."
               
@@ -153,7 +153,7 @@ pipeline {
               docker rm urbantracker-backend-develop || true
               
               # Verificar si hay otros contenedores usando el puerto 8080
-              CONTAINER_USING_PORT=$(docker ps --format 'table {{.Names}}' | grep -v NAME | xargs -I {} sh -c 'docker port {} 8080 2>/dev/null && echo {}' | head -1 | cut -d' ' -f1 || true)
+              CONTAINER_USING_PORT=$(docker ps --format '"'"'table {{.Names}}'"'"' | grep -v NAME | xargs -I {} sh -c '"'"'docker port {} 8080 2>/dev/null && echo {}'"'"' | head -1 | cut -d'"'"' '"'"' -f1 || true)
               if [ -n "$CONTAINER_USING_PORT" ]; then
                 echo "🔄 Deteniendo contenedor que usa puerto 8080: $CONTAINER_USING_PORT"
                 docker stop "$CONTAINER_USING_PORT" || true
@@ -171,7 +171,7 @@ pipeline {
                 -p 8080:8080 \\
                 --restart unless-stopped \\
                 ${env.IMAGE_TAG}
-            """
+            '''
           }
         }
       }
