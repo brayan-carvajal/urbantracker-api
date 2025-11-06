@@ -2,10 +2,10 @@ pipeline {
   agent any
 
   environment {
-    // Valores por defecto / ayudantes
-    DOCKER_CLI_HINTS = "off"
-    IMAGE_BASE = "local/urbantracker-back"     // base local para la imagen (puedes cambiar por registry)
-    NETWORK_PREFIX = "urban-net"
+    ENV_FILE = 'Backend/Devops/.env.develop'
+    COMPOSE_FILE = 'Backend/Devops/docker-compose.yml'
+    DOCKERFILE_PATH = 'Backend/Devops/Dockerfile.app'
+    DOCKER_IMAGE_NAME = 'backend-develop:latest'
   }
 
   stages {
