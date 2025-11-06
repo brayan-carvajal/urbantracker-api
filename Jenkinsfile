@@ -118,20 +118,8 @@ pipeline {
           // si existe un DB compose en la ruta esperada y el ambiente no es prod, levanta DB
           if (env.ENVIRONMENT == 'develop' || env.ENVIRONMENT == 'staging' || env.ENVIRONMENT == 'qa') {
             if (fileExists(env.COMPOSE_FILE)) {
-              echo "🗄️ Levantando DB desde ${env.COMPOSE_FILE} (ambiente ${env.ENVIRONMENT})..."
-              // asegurar que BACKEND_IMAGE esté en el .env de compose antes de up (lo hará la siguiente stage si aplica)
-              sh """
-                # Si existe .env local para compose, añadimos/actualizamos la variable BACKEND_IMAGE
-                if [ -f ${env.ENV_FILE} ]; then
-                  grep -v '^BACKEND_IMAGE=' ${env.ENV_FILE} > ${env.ENV_FILE}.tmp || true
-                else
-                  touch ${env.ENV_FILE}.tmp
-                fi
-                echo "BACKEND_IMAGE=${env.IMAGE_TAG}" >> ${env.ENV_FILE}.tmp
-                mv ${env.ENV_FILE}.tmp ${env.ENV_FILE}
-                # levantar solo servicio de DB si compose lo define (puede depender de tu compose)
-                docker compose -f ${env.COMPOSE_FILE} --env-file ${env.ENV_FILE} up -d db || docker compose -f ${env.COMPOSE_FILE} --env-file ${env.ENV_FILE} up -d
-              """
+              echo "🗄️ Base de datos definida en compose pero omitida (sin Docker Compose instalado)"
+              echo "⚠️ Saltando setup de DB - puede ser necesario configurar manualmente"
             } else {
               echo "⚠️ No existe ${env.COMPOSE_FILE} — saltando DB local"
             }
@@ -154,19 +142,20 @@ pipeline {
             // withCredentials([...]) { sh """ ssh -i $SSH_KEY ... """ }
             echo "Implementa SSH deploy aquí si lo necesitas"
           } else {
-            echo "🚀 Despliegue local con docker compose (${env.ENVIRONMENT})"
-            // actualizamos BACKEND_IMAGE en el .env y hacemos up -d --build para backend
+            echo "🚀 Desplegando backend con Docker directo (${env.ENVIRONMENT})"
+            // No usar docker compose, deployment directo con Docker
             sh """
-              # actualizar BACKEND_IMAGE en el env file del compose
-              if [ -f ${env.ENV_FILE} ]; then
-                grep -v '^BACKEND_IMAGE=' ${env.ENV_FILE} > ${env.ENV_FILE}.tmp || true
-              else
-                touch ${env.ENV_FILE}.tmp
-              fi
-              echo "BACKEND_IMAGE=${env.IMAGE_TAG}" >> ${env.ENV_FILE}.tmp
-              mv ${env.ENV_FILE}.tmp ${env.ENV_FILE}
-
-              docker compose -f ${env.COMPOSE_FILE} --env-file ${env.ENV_FILE} up -d --build --remove-orphans
+              # Detener y remover contenedor anterior si existe
+              docker stop urbantracker-backend-develop || true
+              docker rm urbantracker-backend-develop || true
+              
+              # Ejecutar contenedor backend con la imagen
+              docker run -d \\
+                --name urbantracker-backend-develop \\
+                --network ${NETWORK_PREFIX}-${env.ENVIRONMENT} \\
+                -p 8080:8080 \\
+                --restart unless-stopped \\
+                ${env.IMAGE_TAG}
             """
           }
         }
@@ -214,12 +203,17 @@ pipeline {
       script {
         // si quieres limpiar solo en develop
         if (env.ENVIRONMENT == 'develop') {
-          echo "🧹 Limpieza: docker compose down (develop)"
-          dir("${env.ENV_DIR}") {
-            sh "docker compose -f ${env.COMPOSE_FILE} --env-file ${env.ENV_FILE} down --volumes --remove-orphans || true"
-          }
-          sh "docker rmi ${env.IMAGE_TAG} || true"
-          sh "docker network rm ${NETWORK_PREFIX}-${env.ENVIRONMENT} || true"
+          echo "🧹 Limpieza: contenedores Docker directos (develop)"
+          // Limpieza de contenedores Docker directos
+          sh """
+            # Detener y remover contenedor backend
+            docker stop urbantracker-backend-develop || true
+            docker rm urbantracker-backend-develop || true
+            # Remover imagen
+            docker rmi ${env.IMAGE_TAG} || true
+            # Remover red
+            docker network rm ${NETWORK_PREFIX}-${env.ENVIRONMENT} || true
+          """
         } else {
           echo "No se realiza down automático para ${env.ENVIRONMENT}"
         }
