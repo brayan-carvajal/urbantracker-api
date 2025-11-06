@@ -2,9 +2,9 @@ pipeline {
   agent any
 
   environment {
-    ENV_FILE = 'Backend/Devops/.env.develop'
-    COMPOSE_FILE = 'Backend/Devops/docker-compose.yml'
-    DOCKERFILE_PATH = 'Backend/Devops/Dockerfile.app'
+    ENV_FILE = 'Backend/Devops/develop/.env.develop'
+    COMPOSE_FILE = 'Backend/Devops/develop/docker-compose.yml'
+    DOCKERFILE_PATH = 'Backend/Devops/develop/Dockerfile.app'
     DOCKER_IMAGE_NAME = 'backend-develop:latest'
     IMAGE_BASE = 'backend'              
     NETWORK_PREFIX = 'myproject-net'    
@@ -151,14 +151,6 @@ pipeline {
               # Detener contenedor anterior si existe
               docker stop urbantracker-backend-develop || true
               docker rm urbantracker-backend-develop || true
-              
-              # Verificar si hay otros contenedores usando el puerto 8080
-              CONTAINER_USING_PORT=$(docker ps --format '"'"'table {{.Names}}'"'"' | grep -v NAME | xargs -I {} sh -c '"'"'docker port {} 8080 2>/dev/null && echo {}'"'"' | head -1 | cut -d'"'"' '"'"' -f1 || true)
-              if [ -n "$CONTAINER_USING_PORT" ]; then
-                echo "🔄 Deteniendo contenedor que usa puerto 8080: $CONTAINER_USING_PORT"
-                docker stop "$CONTAINER_USING_PORT" || true
-                docker rm "$CONTAINER_USING_PORT" || true
-              fi
               
               # Esperar un momento para que el puerto se libere
               sleep 3
