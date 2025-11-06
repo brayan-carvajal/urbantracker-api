@@ -203,10 +203,10 @@ pipeline {
             """
           }
 
-          // comprobar health del backend (intenta localhost:8080)
+          // comprobar health del backend (intenta localhost:8081)
           sh """
             for i in \$(seq 1 30); do
-              curl -sS --fail http://localhost:8080/actuator/health && break || sleep 2
+              curl -sS --fail http://localhost:8081/actuator/health && break || sleep 2
             done || echo "Healthcheck app falló (revisa logs del contenedor backend)"
           """
         }
