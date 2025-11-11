@@ -2,17 +2,13 @@ pipeline {
   agent any
 
   environment {
-    ENV_FILE = 'Backend/Devops/develop/.env.develop'
-    COMPOSE_FILE = 'Backend/Devops/develop/docker-compose.yml'
-    DOCKERFILE_PATH = 'Backend/Devops/develop/Dockerfile.app'
-    DOCKER_IMAGE_NAME = 'backend-develop:latest'
     IMAGE_BASE = 'backend'              
     NETWORK_PREFIX = 'myproject-net'    
-}
-
+    COMPOSE_PROJECT_NAME = 'urbantracker'
+  }
 
   stages {
-
+    
     stage('Permisos workspace') {
       steps {
         sh '''
@@ -39,10 +35,10 @@ pipeline {
               exit 1
             fi
             echo "ENVIRONMENT=$ENVIRONMENT" > env.properties
-            # Rutas relativas dentro del repo (similares a tu ejemplo)
+            # Rutas corregidas dentro del repo
             echo "ENV_DIR=Backend/Devops/$ENVIRONMENT" >> env.properties
             echo "COMPOSE_FILE=Backend/Devops/$ENVIRONMENT/docker-compose.yml" >> env.properties
-            echo "ENV_FILE=Backend/Devops/$ENVIRONMENT/.env" >> env.properties
+            echo "ENV_FILE=Backend/Devops/$ENVIRONMENT/.env.$ENVIRONMENT" >> env.properties
           '''
           def props = readProperties file: 'env.properties'
           env.ENVIRONMENT = props['ENVIRONMENT']
@@ -61,7 +57,21 @@ pipeline {
     }
 
     // =====================================================
-    // 2️⃣ Compilar backend (maven inside container)
+    // 2️⃣ Verificar herramientas necesarias
+    // =====================================================
+    stage('Verificar herramientas') {
+      steps {
+        sh '''
+          echo "🔍 Verificando herramientas..."
+          docker --version
+          mvn --version
+          curl --version
+        '''
+      }
+    }
+
+    // =====================================================
+    // 3️⃣ Compilar backend (maven inside container)
     // =====================================================
     stage('Compilar Backend') {
       steps {
@@ -69,7 +79,15 @@ pipeline {
           script {
             echo "📦 Compilando Backend con maven..."
             docker.image('maven:3.9.4-eclipse-temurin-17').inside {
-              sh 'mvn -B clean package -DskipTests'
+              sh '''
+                set -e
+                # Verificar que pom.xml existe
+                if [ ! -f "pom.xml" ]; then
+                  echo "❌ pom.xml no encontrado en Backend/"
+                  exit 1
+                fi
+                mvn -B clean package -DskipTests
+              '''
             }
           }
         }
@@ -77,95 +95,160 @@ pipeline {
     }
 
     // =====================================================
-    // 3️⃣ Construir imagen Docker del backend
+    // 4️⃣ Construir imagen Docker del backend
     // =====================================================
     stage('Construir imagen Docker') {
       steps {
         dir('Backend') {
           script {
             echo "🐳 Construyendo imagen Docker del backend..."
+            
             // tag con commit hash corto
             def commit = sh(script: "git rev-parse --short HEAD", returnStdout: true).trim()
             env.IMAGE_TAG = "${IMAGE_BASE}:${env.ENVIRONMENT}-${commit}"
-            // Copiar jar al devops dir para construir (Dockerfile.app espera app.jar)
+            
+            echo "📂 Directorio actual: $(pwd)"
+            echo "📂 Listando contenido:"
+            sh 'ls -la'
+            
+            // Verificar que el jar existe
             sh '''
-              JARFILE=$(ls target/*.jar | head -n 1)
+              JARFILE=$(ls target/*.jar 2>/dev/null | head -n 1)
               if [ -z "$JARFILE" ]; then
-                echo "No se encontró jar en Backend/target"
+                echo "❌ No se encontró jar en Backend/target"
+                echo "📂 Contenido de target/:"
+                ls -la target/ || echo "Target directory no existe"
                 exit 1
               fi
+              echo "✅ JAR encontrado: $JARFILE"
+              
+              # Crear directorio Devops/develop con estructura correcta
               mkdir -p Devops/develop
               cp ${JARFILE} Devops/develop/app.jar
+              echo "✅ JAR copiado a Devops/develop/app.jar"
             '''
-            // construir
-            sh "docker build --no-cache -t ${env.IMAGE_TAG} -f Devops/develop/Dockerfile.app Devops/develop"
-            echo "Imagen creada: ${env.IMAGE_TAG}"
+            
+            // Verificar que Dockerfile.app existe
+            if (!fileExists('Devops/develop/Dockerfile.app')) {
+              error "❌ Devops/develop/Dockerfile.app no encontrado"
+            }
+            
+            // construir imagen
+            sh """
+              echo "🐳 Construyendo imagen con tag: ${env.IMAGE_TAG}"
+              docker build --no-cache -t ${env.IMAGE_TAG} -f Devops/develop/Dockerfile.app Devops/develop
+            """
+            echo "✅ Imagen creada: ${env.IMAGE_TAG}"
           }
         }
       }
     }
 
     // =====================================================
-    // 4️⃣ Preparar red y base de datos
+    // 5️⃣ Preparar servicios auxiliares (DB + Mosquitto)
     // =====================================================
-    stage('Preparar red y base de datos') {
+    stage('Preparar servicios auxiliares') {
       steps {
         script {
           def netName = "${NETWORK_PREFIX}-${env.ENVIRONMENT}"
-          echo "🌐 Verificando red ${netName} ..."
+          echo "🌐 Creando red ${netName} ..."
           sh "docker network create ${netName} || echo '✅ Red ya existe'"
 
-          // si existe un DB compose en la ruta esperada y el ambiente no es prod, levanta DB
           if (env.ENVIRONMENT == 'develop' || env.ENVIRONMENT == 'staging' || env.ENVIRONMENT == 'qa') {
-            if (fileExists(env.COMPOSE_FILE)) {
-              echo "🗄️ Base de datos definida en compose pero omitida (sin Docker Compose instalado)"
-              echo "⚠️ Saltando setup de DB - puede ser necesario configurar manualmente"
-            } else {
-              echo "⚠️ No existe ${env.COMPOSE_FILE} — saltando DB local"
+            script {
+              echo "🚀 Iniciando servicios auxiliares..."
+              
+              // Levantar base de datos
+              if (fileExists(env.COMPOSE_FILE)) {
+                echo "🗄️ Usando docker-compose para servicios DB..."
+                sh """
+                  cd ${env.ENV_DIR}
+                  docker-compose down || true
+                  docker-compose up -d postgres-develop
+                  sleep 10
+                """
+              } else {
+                echo "⚠️ docker-compose no encontrado, iniciando PostgreSQL directamente..."
+                sh """
+                  docker run -d \\
+                    --name urbantracker-postgres-${env.ENVIRONMENT} \\
+                    --network ${netName} \\
+                    -e POSTGRES_DB=urbantracker_${env.ENVIRONMENT} \\
+                    -e POSTGRES_USER=postgres \\
+                    -e POSTGRES_PASSWORD=develop1234 \\
+                    -p 5433:5432 \\
+                    --restart unless-stopped \\
+                    postgres:15
+                """
+              }
+
+              // Levantar Mosquitto MQTT
+              echo "📡 Iniciando broker Mosquitto MQTT..."
+              sh """
+                docker run -d \\
+                  --name urbantracker-mosquitto-${env.ENVIRONMENT} \\
+                  --network ${netName} \\
+                  -p 1883:1883 \\
+                  -p 9001:9001 \\
+                  -v mosquitto/config:/mosquitto/config \\
+                  --restart unless-stopped \\
+                  eclipse-mosquitto:2
+              """
             }
           } else {
-            echo "🛑 Ambiente prod detected: no levantamos DB local (asumir DB remota)"
+            echo "🛑 Ambiente prod detectado: saltando servicios locales"
           }
         }
       }
     }
 
     // =====================================================
-    // 5️⃣ Desplegar backend (docker compose)
+    // 6️⃣ Desplegar backend
     // =====================================================
     stage('Desplegar Backend') {
       steps {
         script {
           if (env.ENVIRONMENT == 'prod') {
-            echo "🚀 Despliegue remoto en producción (via SSH) - debes configurar credenciales"
-            // este bloque es opcional: requiere credenciales (ssh) configuradas en Jenkins
-            // withCredentials([...]) { sh """ ssh -i $SSH_KEY ... """ }
-            echo "Implementa SSH deploy aquí si lo necesitas"
+            echo "🚀 Despliegue remoto en producción - configurar SSH"
+            // TODO: Implementar deployment por SSH
           } else {
             script {
-              echo "🚀 Desplegando backend con Docker directo (${env.ENVIRONMENT})"
+              echo "🚀 Desplegando backend local (${env.ENVIRONMENT})"
               
-              // Configurar variables
               def networkName = "${NETWORK_PREFIX}-${env.ENVIRONMENT}"
               def imageTag = env.IMAGE_TAG
+              def containerName = "urbantracker-backend-${env.ENVIRONMENT}"
               
-              // Ejecutar contenedor backend
               sh """
                 echo "🔍 Preparando despliegue..."
                 
                 # Detener contenedor anterior si existe
-                docker stop urbantracker-backend-develop || true
-                docker rm urbantracker-backend-develop || true
+                docker stop ${containerName} || true
+                docker rm ${containerName} || true
                 
                 # Esperar liberación
                 sleep 3
                 
-                # Ejecutar contenedor backend en puerto 8081 (host) -> 8080 (contenedor)
+                # Configurar variables de entorno
+                DB_HOST=urbantracker-postgres-${env.ENVIRONMENT}
+                DB_PORT=5432
+                DB_NAME=urbantracker_${env.ENVIRONMENT}
+                DB_USERNAME=postgres
+                DB_PASSWORD=develop1234
+                MQTT_BROKER=urbantracker-mosquitto-${env.ENVIRONMENT}
+                
+                # Ejecutar contenedor backend
                 echo "🚀 Iniciando contenedor backend en puerto 8081..."
                 docker run -d \\
-                  --name urbantracker-backend-develop \\
+                  --name ${containerName} \\
                   --network ${networkName} \\
                   -p 8081:8080 \\
+                  -e SPRING_PROFILES_ACTIVE=${env.ENVIRONMENT} \\
+                  -e SPRING_DATASOURCE_URL=jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_NAME} \\
+                  -e SPRING_DATASOURCE_USERNAME=${DB_USERNAME} \\
+                  -e SPRING_DATASOURCE_PASSWORD=${DB_PASSWORD} \\
+                  -e SPRING_MQTT_BROKER_HOST=${MQTT_BROKER} \\
+                  -e SPRING_MQTT_BROKER_PORT=1883 \\
                   --restart unless-stopped \\
                   ${imageTag}
                 
@@ -178,29 +261,45 @@ pipeline {
     }
 
     // =====================================================
-    // 6️⃣ Verificaciones rápidas
+    // 7️⃣ Health checks y verificaciones
     // =====================================================
-    stage('Healthchecks & Status') {
+    stage('Health Checks') {
       steps {
         script {
           echo "🔎 Esperando servicios..."
-          // esperar DB si está definido DB_HOST/DB_PORT en env file
-          if (fileExists(env.ENV_FILE)) {
-            def dbHost = sh(returnStdout: true, script: "grep -E '^DB_HOST=' ${env.ENV_FILE} | cut -d'=' -f2 || echo db").trim()
-            def dbPort = sh(returnStdout: true, script: "grep -E '^DB_PORT=' ${env.ENV_FILE} | cut -d'=' -f2 || echo 5432").trim()
-            echo "Comprobando postgres ${dbHost}:${dbPort}"
-            sh """
-              for i in \$(seq 1 40); do
-                docker run --rm --network ${NETWORK_PREFIX}-${env.ENVIRONMENT} postgres:15 pg_isready -h ${dbHost} -p ${dbPort} && break || sleep 1
-              done || echo "pg_isready timeout (la DB puede tardar)"
-            """
-          }
-
-          // comprobar health del backend (intenta localhost:8081)
+          
+          // Esperar database
+          def dbHost = "urbantracker-postgres-${env.ENVIRONMENT}"
+          def dbPort = "5432"
+          echo "Comprobando postgres ${dbHost}:${dbPort}"
           sh """
-            for i in \$(seq 1 30); do
-              curl -sS --fail http://localhost:8081/actuator/health && break || sleep 2
-            done || echo "Healthcheck app falló (revisa logs del contenedor backend)"
+            for i in $(seq 1 30); do
+              docker run --rm --network ${NETWORK_PREFIX}-${env.ENVIRONMENT} postgres:15 pg_isready -h ${dbHost} -p ${dbPort} && break || sleep 2
+            done || echo "⚠️ pg_isready timeout - continuando de todas formas"
+          """
+
+          // Esperar Mosquitto
+          echo "Comprobando Mosquitto MQTT..."
+          sh """
+            for i in $(seq 1 20); do
+              docker run --rm --network ${NETWORK_PREFIX}-${env.ENVIRONMENT} eclipse-mosquitto:2 mosquitto_pub -h urbantracker-mosquitto-${env.ENVIRONMENT} -p 1883 -t test/topic -m "test" && break || sleep 2
+            done || echo "⚠️ Mosquitto no responde - continuando de todas formas"
+          """
+
+          // Comprobar health del backend
+          echo "Comprobando health del backend..."
+          sh """
+            for i in $(seq 1 40); do
+              echo "Intento \$i/40: Verificando http://localhost:8081/actuator/health"
+              curl -sS --fail --connect-timeout 5 http://localhost:8081/actuator/health && break || {
+                echo "Health check fallido, esperando..."
+                sleep 3
+              }
+            done || echo "⚠️ Health check falló - revisar logs del contenedor"
+            
+            # Mostrar logs del contenedor para diagnóstico
+            echo "📋 Logs del contenedor backend:"
+            docker logs urbantracker-backend-${env.ENVIRONMENT} || true
           """
         }
       }
@@ -209,28 +308,44 @@ pipeline {
 
   post {
     success {
-      echo "🎉 Deploy completado para ${env.ENVIRONMENT}"
+      echo "🎉 Deploy completado exitosamente para ${env.ENVIRONMENT}"
+      echo "📊 Servicios disponibles:"
+      echo "   - Backend: http://localhost:8081"
+      sh '''
+        docker ps --filter "name=urbantracker" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+      '''
     }
     failure {
       echo "💥 Error durante deploy en ${env.ENVIRONMENT}"
+      echo "🔍 Logs del contenedor backend (últimas 50 líneas):"
+      sh '''
+        docker logs urbantracker-backend-${env.ENVIRONMENT} --tail 50 2>/dev/null || echo "Contenedor no encontrado"
+      '''
     }
     always {
       script {
-        // si quieres limpiar solo en develop
         if (env.ENVIRONMENT == 'develop') {
-          echo "🧹 Limpieza: contenedores Docker directos (develop)"
-          // Limpieza de contenedores Docker directos
+          echo "🧹 Limpieza automática para ambiente develop"
           sh """
-            # Detener y remover contenedor backend
-            docker stop urbantracker-backend-develop || true
-            docker rm urbantracker-backend-develop || true
-            # Remover imagen
+            # Limpiar contenedores
+            docker stop urbantracker-backend-${env.ENVIRONMENT} || true
+            docker rm urbantracker-backend-${env.ENVIRONMENT} || true
+            docker stop urbantracker-postgres-${env.ENVIRONMENT} || true
+            docker rm urbantracker-postgres-${env.ENVIRONMENT} || true
+            docker stop urbantracker-mosquitto-${env.ENVIRONMENT} || true
+            docker rm urbantracker-mosquitto-${env.ENVIRONMENT} || true
+            
+            # Limpiar imagen
             docker rmi ${env.IMAGE_TAG} || true
-            # Remover red
+            
+            # Limpiar red
             docker network rm ${NETWORK_PREFIX}-${env.ENVIRONMENT} || true
+            
+            # Limpiar volúmenes huérfanos
+            docker volume prune -f || true
           """
         } else {
-          echo "No se realiza down automático para ${env.ENVIRONMENT}"
+          echo "⏸️ Ambiente ${env.ENVIRONMENT}: servicios permanecen activos para debugging"
         }
       }
     }
