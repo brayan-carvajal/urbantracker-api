@@ -107,7 +107,7 @@ pipeline {
             def commit = sh(script: "git rev-parse --short HEAD", returnStdout: true).trim()
             env.IMAGE_TAG = "${IMAGE_BASE}:${env.ENVIRONMENT}-${commit}"
             
-            echo "📂 Directorio actual: $(pwd)"
+            echo "📂 Directorio actual: Backend/"
             echo "📂 Listando contenido:"
             sh 'ls -la'
             
