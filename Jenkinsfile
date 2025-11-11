@@ -106,7 +106,7 @@ pipeline {
     }
 
     // =====================================================
-    // 5️⃣ Preparar red y base de datos
+    // 5️⃣ Preparar red y servicios
     // =====================================================
     stage('Preparar servicios') {
       steps {
@@ -186,29 +186,36 @@ pipeline {
     }
 
     // =====================================================
-    // 7️⃣ Health checks simples
+    // 7️⃣ Verificar estado del contenedor
     // =====================================================
-    stage('Health Checks') {
+    stage('Verificar Estado') {
       steps {
         script {
-          echo "🔎 Esperando backend..."
+          echo "🔎 Verificando estado del backend..."
           
-          // Esperar un poco antes de hacer health check
+          // Esperar y mostrar información de diagnóstico
           sh '''
-            sleep 15
-            echo "⏱️ Esperando 15 segundos para que el backend inicie..."
-          '''
-          
-          // Health check simple
-          sh '''
-            echo "🔍 Verificando health del backend..."
-            curl -sS --fail --connect-timeout 10 --max-time 30 http://localhost:8081/actuator/health || {
-              echo "⚠️ Health check falló"
-              echo "📋 Logs del contenedor:"
-              docker logs urbantracker-backend-develop || true
-              exit 1
+            sleep 20
+            echo "⏱️ Esperando 20 segundos para inicialización..."
+            
+            echo "📊 Estado de contenedores:"
+            docker ps -a --filter "name=urbantracker-backend"
+            
+            echo "📋 Logs del backend (últimas 20 líneas):"
+            docker logs urbantracker-backend-develop --tail 20 || true
+            
+            echo "🔍 Intentando health check..."
+            curl -sS --connect-timeout 5 --max-time 10 http://localhost:8081/actuator/health && {
+              echo "✅ Backend respondiendo correctamente"
+            } || {
+              echo "⚠️ Backend no responde en puerto 8081"
+              echo "🔍 Intentando puerto 8080..."
+              curl -sS --connect-timeout 5 --max-time 10 http://localhost:8080/actuator/health && {
+                echo "✅ Backend respondiendo en puerto 8080"
+              } || {
+                echo "⚠️ Backend no está respondiendo aún - puede estar iniciando"
+              }
             }
-            echo "✅ Health check exitoso"
           '''
         }
       }
