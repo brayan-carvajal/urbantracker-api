@@ -1,4 +1,4 @@
-# urbantracker-api# UrbanTracker-api ⚙️
+UrbanTracker-api ⚙️
 
 **UrbanTracker API** es el backend de la plataforma de monitoreo de transporte público en tiempo real. Esta API proporciona todos los servicios necesarios para gestionar usuarios, vehículos, rutas y datos de localización en tiempo real.
 
@@ -118,98 +118,10 @@ docker-compose up mosquitto
 
 ---
 
-## 📚 Endpoints Principales
-
-### Autenticación
-- `POST /api/auth/login` - Iniciar sesión
-- `POST /api/auth/forgot-password` - Solicitar recuperación
-- `POST /api/auth/verify-otp` - Verificar código OTP
-
-### Usuarios
-- `GET /api/users` - Listar usuarios
-- `POST /api/users` - Crear usuario
-- `PUT /api/users/{id}` - Actualizar usuario
-- `DELETE /api/users/{id}` - Eliminar usuario
-
-### Conductores
-- `GET /api/drivers` - Listar conductores
-- `POST /api/drivers` - Crear conductor
-- `PUT /api/drivers/{id}` - Actualizar conductor
-- `GET /api/drivers/{id}/schedules` - Obtener horarios
-
-### Vehículos
-- `GET /api/vehicles` - Listar vehículos
-- `POST /api/vehicles` - Crear vehículo
-- `PUT /api/vehicles/{id}` - Actualizar vehículo
-- `GET /api/vehicles/{id}/assignments` - Ver asignaciones
-
-### Rutas
-- `GET /api/routes` - Listar rutas
-- `POST /api/routes` - Crear ruta
-- `PUT /api/routes/{id}` - Actualizar ruta
-- `GET /api/routes/{id}/trajectory` - Obtener trayectoria
-
----
-
-## 🔌 WebSocket Endpoints
-
-### Ubicaciones en Tiempo Real
-- `ws://localhost:8080/ws/locations` - Stream de ubicaciones de vehículos
-
-### MQTT Topics
-- `urbantracker/gps/{vehicleId}` - Datos GPS de vehículos
-- `urbantracker/status/{vehicleId}` - Estado de vehículos
-
----
-
 ## 📖 Documentación API
 
 Una vez ejecutando la aplicación, accede a la documentación interactiva en:
 - **Swagger UI**: `http://localhost:8080/swagger-ui.html`
-
----
-
-## 🧪 Testing
-
-```bash
-# Ejecutar todos los tests
-mvn test
-
-# Ejecutar tests específicos
-mvn test -Dtest=UserServiceTest
-
-# Generar reporte de cobertura
-mvn jacoco:report
-```
-
----
-
-## 🔧 Configuración
-
-### Variables de Entorno Principales
-
-```env
-# Base de datos
-DB_HOST=localhost
-DB_PORT=5432
-DB_NAME=urbantracker
-DB_USERNAME=postgres
-DB_PASSWORD=password
-
-# JWT
-JWT_SECRET=your-secret-key
-JWT_EXPIRATION=86400
-
-# Email
-MAIL_HOST=smtp.gmail.com
-MAIL_PORT=587
-MAIL_USERNAME=your-email
-MAIL_PASSWORD=your-password
-
-# MQTT
-MQTT_BROKER_URL=tcp://localhost:1883
-MQTT_CLIENT_ID=urbantracker-api
-```
 
 ---
 
