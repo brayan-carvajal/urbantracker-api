@@ -39,6 +39,23 @@ public class MqttMessageListener {
             } catch (Exception e) {
                 log.error("Error parseando payload MQTT para routeId: {}", routeId, e);
             }
+        } else if (topic.startsWith("vehicles/")) {
+            String[] parts = topic.split("/");
+            String vehicleId = parts[1];
+
+            try {
+                TrackingReqDto telemetry = objectMapper.readValue(payload, TrackingReqDto.class);
+                // Si tiene routeId, enviar a route, sino a vehicles
+                if (telemetry.getRouteId() != null) {
+                    messagingTemplate.convertAndSend("/topic/route/" + telemetry.getRouteId() + "/telemetry", telemetry);
+                    log.info("📡 Telemetría enviada vía WebSocket para routeId: {} desde vehicles", telemetry.getRouteId());
+                } else {
+                    messagingTemplate.convertAndSend("/topic/vehicles/" + vehicleId + "/telemetry", telemetry);
+                    log.info("📡 Telemetría enviada vía WebSocket para vehicleId: {} (sin ruta)", vehicleId);
+                }
+            } catch (Exception e) {
+                log.error("Error parseando payload MQTT para vehicleId: {}", vehicleId, e);
+            }
         }
     }
 }
