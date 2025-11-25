@@ -17,6 +17,9 @@ public class RoutePersistenceMapper {
                 .active(domain.getActive())
                 .createdAt(domain.getCreatedAt())
                 .updatedAt(domain.getUpdatedAt())
+                .company(domain.getCompanyId() != null ? 
+                    com.sena.urbantracker.users.infrastructure.persistence.model.CompanyModel.builder()
+                        .id(domain.getCompanyId()).build() : null)
                 .build();
     }
 
@@ -32,6 +35,7 @@ public class RoutePersistenceMapper {
                 .active(model.getActive())
                 .createdAt(model.getCreatedAt())
                 .updatedAt(model.getUpdatedAt())
+                .companyId(model.getCompany() != null ? model.getCompany().getId() : null)
                 .build();
     }
 }

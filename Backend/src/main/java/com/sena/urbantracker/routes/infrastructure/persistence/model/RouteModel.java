@@ -1,6 +1,7 @@
 package com.sena.urbantracker.routes.infrastructure.persistence.model;
 
 import com.sena.urbantracker.shared.infrastructure.persistence.model.BaseEntity;
+import com.sena.urbantracker.users.infrastructure.persistence.model.CompanyModel;
 import jakarta.persistence.*;
 import lombok.*;
 import lombok.experimental.SuperBuilder;
@@ -30,6 +31,10 @@ public class RouteModel extends BaseEntity {
 
     @Column(name = "return_image_url")
     private String returnImageUrl;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "company_id", nullable = true)
+    private CompanyModel company;
 
     @OneToMany(mappedBy = "route", cascade = CascadeType.ALL)
     private List<RouteWaypointModel> routeWaypoints;
