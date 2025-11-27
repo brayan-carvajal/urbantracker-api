@@ -54,6 +54,12 @@ public class VehicleModel extends BaseEntity {
     @Builder.Default
     private boolean inService = false;
 
+    @Column(name = "outbound_image_url", length = 500)
+    private String outboundImageUrl;
+
+    @Column(name = "return_image_url", length = 500)
+    private String returnImageUrl;
+
     @OneToMany(mappedBy = "vehicle", cascade = CascadeType.ALL)
     private List<VehicleAssignmentModel> vehicleAssignments;
 

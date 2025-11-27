@@ -22,4 +22,7 @@ public class VehicleResDto extends ABaseResDto {
     private String licencePlate;
     private VehicleTypeResDto vehicleType;
     private String status;
+    private String outboundImageUrl;
+    private String returnImageUrl;
+    private boolean inService;
 }

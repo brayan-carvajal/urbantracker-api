@@ -15,31 +15,30 @@ import lombok.experimental.SuperBuilder;
 @NoArgsConstructor
 @EqualsAndHashCode(callSuper = true)
 public class VehicleReqDto extends ABaseReqDto {
-    @NotNull(message = "El ID de la compañía es obligatorio")
+    // Las validaciones @NotNull y @NotBlank se aplican principalmente para creación
+    // Para actualizaciones, estos campos pueden ser opcionales
     private Long companyId;
 
-    @NotNull(message = "El ID del tipo de vehículo es obligatorio")
     private Long vehicleTypeId;
 
-    @NotBlank(message = "La placa del vehículo es obligatoria")
-    @Pattern(regexp = "^[A-Z]{3}-\\d{3}$", message = "La placa debe tener formato AAA-123")
+    // Patrón más flexible para placas: permite letras y números con formato flexible
+    @Pattern(regexp = "^[A-Z0-9]{3,4}-?[A-Z0-9]{3,4}$", message = "La placa debe tener formato válido (ej: ABC-123, ABC123)")
     private String licencePlate;
 
-    @NotBlank(message = "La marca es obligatoria")
     private String brand;
 
-    @NotBlank(message = "El modelo es obligatorio")
     private String model;
 
-    @NotNull(message = "El año es obligatorio")
     private Integer year;
 
     private String color;
 
-    @NotNull(message = "La capacidad de pasajeros es obligatoria")
     private Integer passengerCapacity;
 
     private VehicleStatusType status;
 
     private boolean inService;
+    
+    private String outboundImageUrl;
+    private String returnImageUrl;
 }

@@ -21,4 +21,6 @@ public class VehicleDomain extends ABaseDomain {
     private Integer passengerCapacity;
     private VehicleStatusType status;
     private boolean inService;
+    private String outboundImageUrl;
+    private String returnImageUrl;
 }

@@ -17,8 +17,11 @@ public class VehicleMapper {
         dto.setYear(entity.getYear());
         dto.setColor(entity.getColor());
         dto.setPassengerCapacity(entity.getPassengerCapacity());
-        dto.setStatus(entity.getStatus().name());
-        // company and vehicleType need to be fetched separately or set to null
+        dto.setStatus(entity.getStatus() != null ? entity.getStatus().name() : null);
+        dto.setOutboundImageUrl(entity.getOutboundImageUrl());
+        dto.setReturnImageUrl(entity.getReturnImageUrl());
+        dto.setInService(entity.isInService());
+        // company and vehicleType set to null to avoid lazy loading issues
         dto.setCompany(null);
         dto.setVehicleType(null);
         return dto;
@@ -37,7 +40,8 @@ public class VehicleMapper {
                 .passengerCapacity(dto.getPassengerCapacity())
                 .status(dto.getStatus() != null ? dto.getStatus() : VehicleStatusType.ACTIVE)
                 .inService(dto.isInService())
-                .active(true)
+                .outboundImageUrl(dto.getOutboundImageUrl())
+                .returnImageUrl(dto.getReturnImageUrl())
                 .build();
     }
 }
