@@ -7,6 +7,43 @@ CREATE SCHEMA IF NOT EXISTS security;
 CREATE SCHEMA IF NOT EXISTS users;
 CREATE SCHEMA IF NOT EXISTS vehicles;
 
+-- Tabla de waypoints de rutas
+CREATE TABLE IF NOT EXISTS routes.route_waypoint (
+    id BIGSERIAL PRIMARY KEY,
+    route_id BIGINT NOT NULL,
+    sequence INTEGER NOT NULL,
+    latitude DOUBLE PRECISION NOT NULL,
+    longitude DOUBLE PRECISION NOT NULL,
+    type VARCHAR(50) NOT NULL,
+    destine VARCHAR(50) NOT NULL,
+    active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_route_waypoint_route FOREIGN KEY (route_id) REFERENCES routes.route(id) ON DELETE CASCADE,
+    CONSTRAINT uk_route_waypoint UNIQUE (route_id, sequence, type, destine)
+);
+
+-- Índices para route_waypoint
+CREATE INDEX IF NOT EXISTS idx_route_waypoint_route_id ON routes.route_waypoint(route_id);
+CREATE INDEX IF NOT EXISTS idx_route_waypoint_type ON routes.route_waypoint(type);
+
+-- Tabla de rutas
+CREATE TABLE IF NOT EXISTS routes.route (
+    id BIGSERIAL PRIMARY KEY,
+    number_route INTEGER NOT NULL UNIQUE,
+    description TEXT,
+    total_distance DOUBLE PRECISION,
+    outbound_image_url TEXT,
+    return_image_url TEXT,
+    active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Índices para route
+CREATE INDEX IF NOT EXISTS idx_route_number_route ON routes.route(number_route);
+CREATE INDEX IF NOT EXISTS idx_route_active ON routes.route(active);
+
 -- Tabla de configuración de estacionamiento
 CREATE TABLE IF NOT EXISTS parking.parking_config (
     id BIGSERIAL PRIMARY KEY,
