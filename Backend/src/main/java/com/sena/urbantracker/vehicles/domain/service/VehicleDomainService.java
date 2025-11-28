@@ -111,6 +111,18 @@ public class VehicleDomainService {
             // Convertir DTO a dominio
             VehicleDomain vehicleDomain = VehicleMapper.toEntity(vehicleReqDto);
 
+            // Asignar relaciones si están presentes
+            if (vehicleReqDto.getCompanyId() != null) {
+                CompanyDomain company = companyRepository.findById(vehicleReqDto.getCompanyId())
+                        .orElseThrow(() -> new EntityNotFoundException("Compañía no encontrada con ID: " + vehicleReqDto.getCompanyId()));
+                vehicleDomain.setCompany(company);
+            }
+            if (vehicleReqDto.getVehicleTypeId() != null) {
+                VehicleTypeDomain vehicleType = vehicleTypeRepository.findById(vehicleReqDto.getVehicleTypeId())
+                        .orElseThrow(() -> new EntityNotFoundException("Tipo de vehículo no encontrado con ID: " + vehicleReqDto.getVehicleTypeId()));
+                vehicleDomain.setVehicleType(vehicleType);
+            }
+
             // Validar que no exista un vehículo con la misma placa
             if (vehicleRepository.existsByLicencePlate(vehicleDomain.getLicencePlate())) {
                 throw new IllegalArgumentException("Ya existe un vehículo con esta placa");
@@ -306,12 +318,12 @@ public class VehicleDomainService {
      */
     public Optional<VehicleResDto> findById(Long id) {
         log.info("Finding vehicle by ID: {}", id);
-        
+
         try {
-            Optional<VehicleDomain> vehicleOpt = vehicleRepository.findById(id);
-            
+            Optional<VehicleDomain> vehicleOpt = vehicleRepository.findByIdWithRelations(id);
+
             return vehicleOpt.map(VehicleMapper::toDto);
-                
+
         } catch (Exception e) {
             log.error("Error finding vehicle by ID: {}", id, e);
             throw new RuntimeException("Error al obtener el vehículo por ID", e);

@@ -19,8 +19,10 @@ public class VehicleResDto extends ABaseResDto {
     private String color;
     private Integer passengerCapacity;
     private CompanyResDto company;
+    private Long companyId; // For frontend compatibility
     private String licencePlate;
     private VehicleTypeResDto vehicleType;
+    private Long vehicleTypeId; // For frontend compatibility
     private String status;
     private String outboundImageUrl;
     private String returnImageUrl;

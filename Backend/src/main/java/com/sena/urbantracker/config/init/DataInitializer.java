@@ -5,8 +5,12 @@ import com.sena.urbantracker.security.domain.entity.RoleDomain;
 import com.sena.urbantracker.security.domain.entity.UserDomain;
 import com.sena.urbantracker.security.domain.repository.RoleRepository;
 import com.sena.urbantracker.security.domain.repository.UserRepository;
+import com.sena.urbantracker.users.domain.entity.CompanyDomain;
 import com.sena.urbantracker.users.domain.entity.UserProfileDomain;
+import com.sena.urbantracker.users.domain.repository.CompanyRepository;
 import com.sena.urbantracker.users.domain.repository.UserProfileRepository;
+import com.sena.urbantracker.vehicles.domain.entity.VehicleTypeDomain;
+import com.sena.urbantracker.vehicles.domain.repository.VehicleTypeRepository;
 import lombok.AllArgsConstructor;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
@@ -21,6 +25,8 @@ public class DataInitializer {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final UserProfileRepository userProfileRepository;
+    private final CompanyRepository companyRepository;
+    private final VehicleTypeRepository vehicleTypeRepository;
 
     @EventListener(ApplicationReadyEvent.class)
     public void initData() {
@@ -59,6 +65,41 @@ public class DataInitializer {
             userProfileRepository.save(adminProfile);
 
         }
+
+        // Compañías de ejemplo
+        if (companyRepository.findAll().isEmpty()) {
+            companyRepository.save(CompanyDomain.builder()
+                    .name("Transportes Urbanos S.A.")
+                    .build());
+
+            companyRepository.save(CompanyDomain.builder()
+                    .name("Bus Rapid Transit Ltda.")
+                    .build());
+
+            companyRepository.save(CompanyDomain.builder()
+                    .name("Metro Transporte")
+                    .build());
+        }
+
+        // Tipos de vehículos de ejemplo
+        if (vehicleTypeRepository.findAll().isEmpty()) {
+            vehicleTypeRepository.save(VehicleTypeDomain.builder()
+                    .name("Autobús Articulado")
+                    .description("Vehículo de transporte público articulado")
+                    .build());
+
+            vehicleTypeRepository.save(VehicleTypeDomain.builder()
+                    .name("Buseta")
+                    .description("Vehículo mediano para rutas locales")
+                    .build());
+
+            vehicleTypeRepository.save(VehicleTypeDomain.builder()
+                    .name("Microbús")
+                    .description("Vehículo pequeño para rutas cortas")
+                    .build());
+        }
+
         System.out.println("✅ Usuario ADMIN creado (user: " + adminUsername + " | pass: admin123)");
+        System.out.println("✅ Datos iniciales creados (compañías y tipos de vehículos)");
     }
 }

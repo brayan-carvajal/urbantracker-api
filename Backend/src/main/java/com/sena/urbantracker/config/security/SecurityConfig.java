@@ -48,6 +48,7 @@ public class SecurityConfig {
                                 "/docs/**",
                                 "/scalar/**",
                                 "/images/**",
+                                "/uploads/**",
                                 "/ws/**",
                                 "/topic/**",
                                 "/app/**",

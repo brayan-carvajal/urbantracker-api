@@ -21,7 +21,16 @@ public class VehicleMapper {
         dto.setOutboundImageUrl(entity.getOutboundImageUrl());
         dto.setReturnImageUrl(entity.getReturnImageUrl());
         dto.setInService(entity.isInService());
-        // company and vehicleType set to null to avoid lazy loading issues
+
+        // Set company and vehicleType IDs for frontend compatibility
+        if (entity.getCompany() != null) {
+            dto.setCompanyId(entity.getCompany().getId());
+        }
+        if (entity.getVehicleType() != null) {
+            dto.setVehicleTypeId(entity.getVehicleType().getId());
+        }
+
+        // Keep full objects as null to avoid lazy loading issues
         dto.setCompany(null);
         dto.setVehicleType(null);
         return dto;
