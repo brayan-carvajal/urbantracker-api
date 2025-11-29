@@ -54,6 +54,14 @@ public class VehicleModel extends BaseEntity {
     @Builder.Default
     private boolean inService = false;
 
+    @Lob
+    @Column(name = "outbound_image_data")
+    private byte[] outboundImageData;
+
+    @Column(name = "outbound_image_content_type", length = 100)
+    private String outboundImageContentType;
+
+    // Legacy URL fields for backward compatibility (can be removed later)
     @Column(name = "outbound_image_url", length = 500)
     private String outboundImageUrl;
 

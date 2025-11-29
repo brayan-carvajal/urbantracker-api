@@ -18,6 +18,17 @@ public class VehicleMapper {
         dto.setColor(entity.getColor());
         dto.setPassengerCapacity(entity.getPassengerCapacity());
         dto.setStatus(entity.getStatus() != null ? entity.getStatus().name() : null);
+
+        // Set image availability flags (don't send BLOB data in list responses)
+        dto.setHasOutboundImage(entity.getOutboundImageData() != null && entity.getOutboundImageData().length > 0);
+
+        // Only set BLOB data if explicitly requested (e.g., for image serving endpoint)
+        // For list operations, these will remain null to avoid performance issues
+        dto.setOutboundImageData(null);
+        dto.setOutboundImageContentType(null);
+        dto.setReturnImageData(null);
+        dto.setReturnImageContentType(null);
+
         dto.setOutboundImageUrl(entity.getOutboundImageUrl());
         dto.setReturnImageUrl(entity.getReturnImageUrl());
         dto.setInService(entity.isInService());

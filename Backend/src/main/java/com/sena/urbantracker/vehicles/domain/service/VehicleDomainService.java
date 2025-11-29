@@ -57,9 +57,9 @@ public class VehicleDomainService {
     private String activeProfile;
 
     /**
-     * Guardar imagen y retornar la URL
+     * Guardar imagen y retornar los datos binarios y tipo de contenido
      */
-    public String saveImage(MultipartFile file) throws IOException {
+    public ImageData saveImage(MultipartFile file) throws IOException {
         if (file.isEmpty()) {
             return null;
         }
@@ -76,35 +76,37 @@ public class VehicleDomainService {
         }
 
         try {
-            // Crear directorio si no existe
-            Path uploadPath = Paths.get(uploadDirectory, "vehicles");
-            Files.createDirectories(uploadPath);
+            // Leer los bytes del archivo
+            byte[] imageData = file.getBytes();
 
-            // Generar nombre único
-            String originalFilename = file.getOriginalFilename();
-            String extension = getFileExtension(originalFilename);
-            String filename = UUID.randomUUID().toString() + "_" + 
-                            LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss")) + 
-                            extension;
-
-            // Guardar archivo
-            Path targetPath = uploadPath.resolve(filename);
-            Files.copy(file.getInputStream(), targetPath, StandardCopyOption.REPLACE_EXISTING);
-
-            // Retornar URL pública - determina dinámicamente la URL base
-            String imageBaseUrl = determineImageBaseUrl();
-            return imageBaseUrl + "/uploads/vehicles/" + filename;
+            return new ImageData(imageData, contentType);
 
         } catch (IOException e) {
-            log.error("Error guardando imagen: {}", file.getOriginalFilename(), e);
-            throw new IOException("Error al guardar la imagen", e);
+            log.error("Error leyendo imagen: {}", file.getOriginalFilename(), e);
+            throw new IOException("Error al procesar la imagen", e);
         }
     }
 
     /**
-     * Crear vehículo con archivos
+     * Clase interna para retornar datos de imagen
      */
-    public CrudResponseDto<VehicleResDto> createWithFiles(VehicleReqDto vehicleReqDto) {
+    public static class ImageData {
+        private final byte[] data;
+        private final String contentType;
+
+        public ImageData(byte[] data, String contentType) {
+            this.data = data;
+            this.contentType = contentType;
+        }
+
+        public byte[] getData() { return data; }
+        public String getContentType() { return contentType; }
+    }
+
+    /**
+     * Crear vehículo con archivos (imágenes se pasan como MultipartFile)
+     */
+    public CrudResponseDto<VehicleResDto> createWithFiles(VehicleReqDto vehicleReqDto, MultipartFile outboundImage, MultipartFile returnImage) {
         log.info("Creating vehicle with files: {}", vehicleReqDto.getLicencePlate());
 
         try {
@@ -128,8 +130,13 @@ public class VehicleDomainService {
                 throw new IllegalArgumentException("Ya existe un vehículo con esta placa");
             }
 
-            // Validar URLs de imágenes si están presentes
-            validateImageUrls(vehicleReqDto.getOutboundImageUrl(), vehicleReqDto.getReturnImageUrl());
+            // Procesar imágenes si están presentes
+            if (outboundImage != null && !outboundImage.isEmpty()) {
+                ImageData imageData = saveImage(outboundImage);
+                vehicleDomain.setOutboundImageData(imageData.getData());
+                vehicleDomain.setOutboundImageContentType(imageData.getContentType());
+            }
+
 
             // Guardar vehículo
             VehicleDomain savedVehicle = vehicleRepository.save(vehicleDomain);
@@ -147,9 +154,9 @@ public class VehicleDomainService {
     }
 
     /**
-     * Actualizar vehículo con archivos
+     * Actualizar vehículo con archivos (imágenes se pasan como MultipartFile)
      */
-    public CrudResponseDto<VehicleResDto> updateWithFiles(Long id, VehicleReqDto vehicleReqDto) {
+    public CrudResponseDto<VehicleResDto> updateWithFiles(Long id, VehicleReqDto vehicleReqDto, MultipartFile outboundImage, MultipartFile returnImage) {
         log.info("Updating vehicle {} with files", id);
 
         try {
@@ -200,15 +207,13 @@ public class VehicleDomainService {
                 existingVehicle.setVehicleType(vehicleType);
             }
 
-            // Actualizar URLs de imágenes si se proporcionaron nuevas
-            if (StringUtils.hasText(vehicleReqDto.getOutboundImageUrl())) {
-                // Si hay una imagen anterior, se puede eliminar aquí si se desea
-                existingVehicle.setOutboundImageUrl(vehicleReqDto.getOutboundImageUrl());
+            // Procesar imágenes si están presentes
+            if (outboundImage != null && !outboundImage.isEmpty()) {
+                ImageData imageData = saveImage(outboundImage);
+                existingVehicle.setOutboundImageData(imageData.getData());
+                existingVehicle.setOutboundImageContentType(imageData.getContentType());
             }
 
-            if (StringUtils.hasText(vehicleReqDto.getReturnImageUrl())) {
-                existingVehicle.setReturnImageUrl(vehicleReqDto.getReturnImageUrl());
-            }
 
             // Guardar vehículo actualizado
             VehicleDomain savedVehicle = vehicleRepository.save(existingVehicle);

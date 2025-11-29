@@ -70,14 +70,20 @@ public class DataInitializer {
         if (companyRepository.findAll().isEmpty()) {
             companyRepository.save(CompanyDomain.builder()
                     .name("Transportes Urbanos S.A.")
+                    .nit("901234567-1")
+                    .country("Colombia")
                     .build());
 
             companyRepository.save(CompanyDomain.builder()
                     .name("Bus Rapid Transit Ltda.")
+                    .nit("901234567-2")
+                    .country("Colombia")
                     .build());
 
             companyRepository.save(CompanyDomain.builder()
                     .name("Metro Transporte")
+                    .nit("901234567-3")
+                    .country("Colombia")
                     .build());
         }
 

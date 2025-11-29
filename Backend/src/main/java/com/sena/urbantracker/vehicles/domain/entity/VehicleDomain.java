@@ -21,6 +21,12 @@ public class VehicleDomain extends ABaseDomain {
     private Integer passengerCapacity;
     private VehicleStatusType status;
     private boolean inService;
+
+    // BLOB data for images
+    private byte[] outboundImageData;
+    private String outboundImageContentType;
+
+    // Legacy URL fields for backward compatibility
     private String outboundImageUrl;
     private String returnImageUrl;
 }
