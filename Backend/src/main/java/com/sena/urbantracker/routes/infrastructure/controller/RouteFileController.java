@@ -5,6 +5,8 @@ import com.sena.urbantracker.routes.application.dto.request.RouteReqDto;
 import com.sena.urbantracker.routes.application.dto.response.RouteResDto;
 import com.sena.urbantracker.routes.application.dto.response.RouteDetailsResDto;
 import com.sena.urbantracker.routes.application.service.RouteService;
+import com.sena.urbantracker.routes.infrastructure.persistence.model.RouteModel;
+import com.sena.urbantracker.routes.infrastructure.repository.jpa.RouteJpaRepository;
 import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -12,12 +14,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
-import org.springframework.core.io.Resource;
-import org.springframework.core.io.FileSystemResource;
 import org.springframework.http.MediaType;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.List;
 import java.util.Optional;
 
@@ -31,9 +28,11 @@ import java.util.Optional;
 public class RouteFileController {
 
     private final RouteService routeService;
+    private final RouteJpaRepository routeJpaRepository;
 
-    public RouteFileController(RouteService routeService) {
+    public RouteFileController(RouteService routeService, RouteJpaRepository routeJpaRepository) {
         this.routeService = routeService;
+        this.routeJpaRepository = routeJpaRepository;
     }
 
     /**
@@ -57,33 +56,7 @@ public class RouteFileController {
             return ResponseEntity.badRequest().body(errorResponse);
         }
 
-        // Procesar archivos y generar URLs
-        String outboundImageUrl = null;
-        String returnImageUrl = null;
-
-        try {
-            if (outboundImage != null && !outboundImage.isEmpty()) {
-                log.debug("Processing outbound image: {} ({} bytes)", outboundImage.getOriginalFilename(), outboundImage.getSize());
-                outboundImageUrl = routeService.saveImage(outboundImage, Integer.valueOf(routeReqDto.getNumberRoute()), "outbound");
-                log.debug("Outbound image saved successfully: {}", outboundImageUrl);
-            }
-
-            if (returnImage != null && !returnImage.isEmpty()) {
-                log.debug("Processing return image: {} ({} bytes)", returnImage.getOriginalFilename(), returnImage.getSize());
-                returnImageUrl = routeService.saveImage(returnImage, Integer.valueOf(routeReqDto.getNumberRoute()), "return");
-                log.debug("Return image saved successfully: {}", returnImageUrl);
-            }
-
-        } catch (Exception e) {
-            log.error("Error processing image files", e);
-            CrudResponseDto<RouteResDto> errorResponse = CrudResponseDto.error(
-                "Error al procesar las imágenes: " + e.getMessage());
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
-        }
-
-        // Establecer las URLs en el DTO
-        routeReqDto.setOutboundImageUrl(outboundImageUrl);
-        routeReqDto.setReturnImageUrl(returnImageUrl);
+        // Las imágenes se procesarán directamente en el servicio
 
         // Crear la ruta usando el servicio
         try {
@@ -113,26 +86,12 @@ public class RouteFileController {
             @PathVariable Long id,
             @Valid @ModelAttribute RouteReqDto routeReqDto,
             @RequestParam(value = "outboundImage", required = false) MultipartFile outboundImage,
-            @RequestParam(value = "returnImage", required = false) MultipartFile returnImage) throws Exception {
+            @RequestParam(value = "returnImage", required = false) MultipartFile returnImage) {
 
         log.info("Updating route {} with files", id);
 
         try {
-            // Procesar archivos y generar URLs
-            String outboundImageUrl = null;
-            String returnImageUrl = null;
-
-            if (outboundImage != null && !outboundImage.isEmpty()) {
-                outboundImageUrl = routeService.saveImage(outboundImage, Integer.valueOf(routeReqDto.getNumberRoute()), "outbound");
-            }
-
-            if (returnImage != null && !returnImage.isEmpty()) {
-                returnImageUrl = routeService.saveImage(returnImage, Integer.valueOf(routeReqDto.getNumberRoute()), "return");
-            }
-
-            // Establecer las URLs en el DTO
-            routeReqDto.setOutboundImageUrl(outboundImageUrl);
-            routeReqDto.setReturnImageUrl(returnImageUrl);
+            // Las imágenes se procesarán directamente en el servicio
 
             // Actualizar la ruta usando el servicio
             CrudResponseDto<RouteResDto> response = routeService.update(routeReqDto, id);
@@ -162,7 +121,7 @@ public class RouteFileController {
     @DeleteMapping("/{id}/images/{imageType}")
     public ResponseEntity<CrudResponseDto<Void>> deleteImage(
             @PathVariable Long id,
-            @PathVariable String imageType) throws Exception {
+            @PathVariable String imageType) {
 
         log.info("Deleting {} image for route {}", imageType, id);
 
@@ -178,7 +137,8 @@ public class RouteFileController {
 
         } catch (Exception e) {
             log.error("Error deleting image", e);
-            throw e;
+            CrudResponseDto<Void> errorResponse = CrudResponseDto.error("Error al eliminar la imagen");
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
         }
     }
 
@@ -238,7 +198,7 @@ public class RouteFileController {
         log.info("Getting route details for ID: {} and type: {}", id, type);
 
         try {
-            CrudResponseDto<com.sena.urbantracker.routes.application.dto.response.RouteDetailsResDto> response =
+            CrudResponseDto<RouteDetailsResDto> response =
                 routeService.findByIdType(id, type);
             return ResponseEntity.ok(response);
 
@@ -325,27 +285,60 @@ public class RouteFileController {
     }
 
     /**
-     * Servir imágenes de rutas (nueva ruta plural)
+     * Servir imágenes de rutas desde la base de datos
      */
-    @GetMapping("/images/{filename:.+}")
-    public ResponseEntity<Resource> serveRouteImage(@PathVariable String filename) {
+    @GetMapping("/{id}/images/{imageType}")
+    // @PreAuthorize("hasRole('ADMIN')") // Imágenes públicas para visualización
+    public ResponseEntity<byte[]> getRouteImage(@PathVariable Long id, @PathVariable String imageType) {
+        log.info("Serving {} image for route {}", imageType, id);
+
         try {
-            Path filePath = Paths.get("src/main/resources/static/images/routes", filename);
-            Resource resource = new FileSystemResource(filePath);
+            Optional<RouteModel> routeOpt = routeJpaRepository.findById(id);
 
-            if (resource.exists() && resource.isReadable()) {
-                String contentType = Files.probeContentType(filePath);
-                if (contentType == null) {
-                    contentType = "application/octet-stream";
-                }
-
-                return ResponseEntity.ok()
-                    .contentType(MediaType.parseMediaType(contentType))
-                    .body(resource);
-            } else {
+            if (routeOpt.isEmpty()) {
+                log.warn("Route with ID {} not found", id);
                 return ResponseEntity.notFound().build();
             }
+
+            RouteModel route = routeOpt.get();
+            log.debug("Route found: {}", route.getNumberRoute());
+
+            byte[] imageData = null;
+            String contentType = null;
+
+            // Determinar qué imagen servir
+            if ("outbound".equals(imageType)) {
+                imageData = route.getOutboundImageData();
+                contentType = route.getOutboundImageContentType();
+                log.debug("Outbound image data length: {}", imageData != null ? imageData.length : "null");
+            } else if ("return".equals(imageType)) {
+                imageData = route.getReturnImageData();
+                contentType = route.getReturnImageContentType();
+                log.debug("Return image data length: {}", imageData != null ? imageData.length : "null");
+            } else {
+                log.warn("Invalid image type: {} (only 'outbound' or 'return' supported for routes)", imageType);
+                return ResponseEntity.badRequest().build();
+            }
+
+            if (imageData == null || imageData.length == 0) {
+                log.warn("No image data found for route {} type {}", id, imageType);
+                return ResponseEntity.notFound().build();
+            }
+
+            // Usar content type por defecto si no está especificado
+            if (contentType == null || contentType.isEmpty()) {
+                contentType = "image/jpeg";
+                log.debug("Using default content type: {}", contentType);
+            }
+
+            log.info("Serving image for route {} type {} ({} bytes, {})", id, imageType, imageData.length, contentType);
+
+            return ResponseEntity.ok()
+                    .contentType(MediaType.parseMediaType(contentType))
+                    .body(imageData);
+
         } catch (Exception e) {
+            log.error("Error serving image for route {}: {}", id, e.getMessage(), e);
             return ResponseEntity.internalServerError().build();
         }
     }

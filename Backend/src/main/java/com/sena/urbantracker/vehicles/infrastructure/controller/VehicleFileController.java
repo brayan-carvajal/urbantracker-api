@@ -15,6 +15,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.io.IOException;
 import java.util.List;
@@ -84,14 +85,15 @@ public class VehicleFileController {
      * Actualizar vehículo con archivos
      */
     @PutMapping(value = "/{id}", consumes = "multipart/form-data")
+    @Transactional
     public ResponseEntity<CrudResponseDto<VehicleResDto>> updateWithFiles(
             @PathVariable Long id,
             @Valid @ModelAttribute VehicleReqDto vehicleReqDto,
             @RequestParam(value = "outboundImage", required = false) MultipartFile outboundImage,
             @RequestParam(value = "returnImage", required = false) MultipartFile returnImage) throws Exception {
-        
+
         log.info("Updating vehicle {} with files", id);
-        
+
         try {
             // Actualizar el vehículo usando el servicio con archivos
             CrudResponseDto<VehicleResDto> response = vehicleDomainService.updateWithFiles(id, vehicleReqDto, outboundImage, returnImage);
@@ -115,31 +117,6 @@ public class VehicleFileController {
         }
     }
 
-    /**
-     * Eliminar imagen de vehículo
-     */
-    @DeleteMapping("/{id}/images/{imageType}")
-    public ResponseEntity<CrudResponseDto<Void>> deleteImage(
-            @PathVariable Long id,
-            @PathVariable String imageType) throws Exception {
-        
-        log.info("Deleting {} image for vehicle {}", imageType, id);
-        
-        try {
-            vehicleDomainService.deleteImage(id, imageType);
-            
-            CrudResponseDto<Void> response = CrudResponseDto.success(
-                null, 
-                "Imagen eliminada exitosamente"
-            );
-            
-            return ResponseEntity.ok(response);
-            
-        } catch (Exception e) {
-            log.error("Error deleting image", e);
-            throw e;
-        }
-    }
 
     /**
      * Obtener todos los vehículos

@@ -207,11 +207,18 @@ public class VehicleDomainService {
                 existingVehicle.setVehicleType(vehicleType);
             }
 
-            // Procesar imágenes si están presentes
+            // Procesar imágenes
             if (outboundImage != null && !outboundImage.isEmpty()) {
+                // Subir nueva imagen
                 ImageData imageData = saveImage(outboundImage);
                 existingVehicle.setOutboundImageData(imageData.getData());
                 existingVehicle.setOutboundImageContentType(imageData.getContentType());
+            } else {
+                // No se envió nueva imagen, eliminar la existente si había
+                if (existingVehicle.getOutboundImageData() != null) {
+                    existingVehicle.setOutboundImageData(null);
+                    existingVehicle.setOutboundImageContentType(null);
+                }
             }
 
 
@@ -229,53 +236,6 @@ public class VehicleDomainService {
         }
     }
 
-    /**
-     * Eliminar imagen de vehículo
-     */
-    public void deleteImage(Long vehicleId, String imageType) throws IOException {
-        log.info("Deleting {} image for vehicle {}", imageType, vehicleId);
-
-        try {
-            // Buscar vehículo
-            VehicleDomain vehicle = vehicleRepository.findById(vehicleId)
-                    .orElseThrow(() -> new IllegalArgumentException("Vehículo no encontrado"));
-
-            String imageUrl = null;
-            if ("outbound".equals(imageType)) {
-                imageUrl = vehicle.getOutboundImageUrl();
-            } else if ("return".equals(imageType)) {
-                imageUrl = vehicle.getReturnImageUrl();
-            } else {
-                throw new IllegalArgumentException("Tipo de imagen inválido: " + imageType);
-            }
-
-            if (imageUrl == null) {
-                throw new IllegalArgumentException("No hay imagen para eliminar");
-            }
-
-            // Eliminar archivo físico
-            String filename = extractFilenameFromUrl(imageUrl);
-            if (filename != null) {
-                Path imagePath = Paths.get(uploadDirectory, "vehicles", filename);
-                Files.deleteIfExists(imagePath);
-            }
-
-            // Actualizar URL en el vehículo
-            if ("outbound".equals(imageType)) {
-                vehicle.setOutboundImageUrl(null);
-            } else if ("return".equals(imageType)) {
-                vehicle.setReturnImageUrl(null);
-            }
-
-            vehicleRepository.save(vehicle);
-
-            log.info("Image deleted successfully: {}", imageUrl);
-
-        } catch (IOException e) {
-            log.error("Error deleting image", e);
-            throw e;
-        }
-    }
 
     /**
      * Extraer extensión del archivo
@@ -340,34 +300,17 @@ public class VehicleDomainService {
      */
     public void delete(Long id) {
         log.info("Deleting vehicle by ID: {}", id);
-        
+
         try {
-            // Buscar vehículo para eliminar archivos primero
+            // Verificar que el vehículo existe
             VehicleDomain vehicle = vehicleRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Vehículo no encontrado"));
 
-            // Eliminar archivos físicos de imágenes si existen
-            if (StringUtils.hasText(vehicle.getOutboundImageUrl())) {
-                String filename = extractFilenameFromUrl(vehicle.getOutboundImageUrl());
-                if (filename != null) {
-                    Path imagePath = Paths.get(uploadDirectory, "vehicles", filename);
-                    Files.deleteIfExists(imagePath);
-                }
-            }
-            
-            if (StringUtils.hasText(vehicle.getReturnImageUrl())) {
-                String filename = extractFilenameFromUrl(vehicle.getReturnImageUrl());
-                if (filename != null) {
-                    Path imagePath = Paths.get(uploadDirectory, "vehicles", filename);
-                    Files.deleteIfExists(imagePath);
-                }
-            }
-            
-            // Eliminar vehículo de la base de datos
+            // Eliminar vehículo de la base de datos (las imágenes se eliminan automáticamente con CASCADE)
             vehicleRepository.deleteById(id);
-            
+
             log.info("Vehicle deleted successfully: {}", id);
-            
+
         } catch (Exception e) {
             log.error("Error deleting vehicle by ID: {}", id, e);
             throw new RuntimeException("Error al eliminar el vehículo", e);

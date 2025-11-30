@@ -38,7 +38,10 @@ public class VehicleReqDto extends ABaseReqDto {
     private VehicleStatusType status;
 
     private boolean inService;
-    
+
     private String outboundImageUrl;
     private String returnImageUrl;
+
+    // Flags for image operations
+    private boolean deleteOutboundImage;
 }

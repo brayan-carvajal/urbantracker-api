@@ -26,10 +26,25 @@ public class RouteModel extends BaseEntity {
     @Column(name = "total_distance")
     private Double totalDistance;
 
-    @Column(name = "outbound_image_url")
+    @Lob
+    @Column(name = "outbound_image_data")
+    private byte[] outboundImageData;
+
+    @Column(name = "outbound_image_content_type", length = 100)
+    private String outboundImageContentType;
+
+    @Lob
+    @Column(name = "return_image_data")
+    private byte[] returnImageData;
+
+    @Column(name = "return_image_content_type", length = 100)
+    private String returnImageContentType;
+
+    // Legacy URL fields for backward compatibility (can be removed later)
+    @Column(name = "outbound_image_url", length = 500)
     private String outboundImageUrl;
 
-    @Column(name = "return_image_url")
+    @Column(name = "return_image_url", length = 500)
     private String returnImageUrl;
 
     @ManyToOne(fetch = FetchType.LAZY)
