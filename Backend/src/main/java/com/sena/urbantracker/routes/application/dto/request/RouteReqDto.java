@@ -39,9 +39,9 @@ public class RouteReqDto extends ABaseReqDto {
 
     private MultipartFile returnImage;
 
-    private Boolean deleteOutboundImage;
+    private boolean deleteOutboundImage;
 
-    private Boolean deleteReturnImage;
+    private boolean deleteReturnImage;
 
     @Null
     private String outboundImageUrl;

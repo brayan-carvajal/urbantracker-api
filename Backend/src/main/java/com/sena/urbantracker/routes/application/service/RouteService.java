@@ -1,4 +1,4 @@
-package com.sena.urbantracker.routes.application.service;
+ package com.sena.urbantracker.routes.application.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -26,6 +26,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.beans.factory.annotation.Value;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -44,6 +46,9 @@ public class RouteService implements CrudOperations<RouteReqDto, RouteResDto, Lo
     private final RouteWaypointRepository routeWaypointRepository;
     private final ObjectMapper objectMapper;
     private final DynamicSubscriptionService dynamicSubscriptionService;
+
+    @PersistenceContext
+    private EntityManager entityManager;
 
     @Value("${app.upload.base-url:http://localhost:8080}")
     private String baseUrl;
@@ -89,6 +94,17 @@ public class RouteService implements CrudOperations<RouteReqDto, RouteResDto, Lo
             } catch (IOException e) {
                 throw new RuntimeException("Error al procesar imagen de vuelta: " + e.getMessage());
             }
+        }
+
+        // ✅ VALIDACIÓN: Ambas imágenes son obligatorias para crear una ruta
+        boolean hasOutboundImage = route.getOutboundImageData() != null && route.getOutboundImageData().length > 0;
+        boolean hasReturnImage = route.getReturnImageData() != null && route.getReturnImageData().length > 0;
+
+        if (!hasOutboundImage) {
+            throw new BadRequestException("La imagen de ida es obligatoria para la ruta.");
+        }
+        if (!hasReturnImage) {
+            throw new BadRequestException("La imagen de vuelta es obligatoria para la ruta.");
         }
 
         // 1) Guarda la ruta y fuerza el INSERT si necesitas el ID ya mismo
@@ -141,6 +157,7 @@ public class RouteService implements CrudOperations<RouteReqDto, RouteResDto, Lo
     @Override
     public CrudResponseDto<List<RouteResDto>> findAll() {
         log.info("[RouteService] findAll called");
+
         List<RouteDomain> routes = routeRepository.findAll();
         log.info("[RouteService] Found {} routes in database", routes.size());
         List<RouteResDto> routesDto = new ArrayList<>();
@@ -148,13 +165,20 @@ public class RouteService implements CrudOperations<RouteReqDto, RouteResDto, Lo
         for (RouteDomain route : routes) {
             boolean needsUpdate = false;
 
-            // Generar URLs para imágenes existentes si no las tienen
+            // Generar URLs para imágenes existentes si no las tienen, o limpiar URLs si no hay datos
             if (route.getOutboundImageData() != null && (route.getOutboundImageUrl() == null || route.getOutboundImageUrl().isEmpty())) {
                 route.setOutboundImageUrl(generateImageUrl(route.getId(), "outbound"));
                 needsUpdate = true;
+            } else if (route.getOutboundImageData() == null && route.getOutboundImageUrl() != null) {
+                route.setOutboundImageUrl(null);
+                needsUpdate = true;
             }
+    
             if (route.getReturnImageData() != null && (route.getReturnImageUrl() == null || route.getReturnImageUrl().isEmpty())) {
                 route.setReturnImageUrl(generateImageUrl(route.getId(), "return"));
+                needsUpdate = true;
+            } else if (route.getReturnImageData() == null && route.getReturnImageUrl() != null) {
+                route.setReturnImageUrl(null);
                 needsUpdate = true;
             }
 
@@ -187,7 +211,7 @@ public class RouteService implements CrudOperations<RouteReqDto, RouteResDto, Lo
         Integer numberRouteInt = Integer.valueOf(request.getNumberRoute());
 
         // Verificar si se debe eliminar imagen outbound
-        if (Boolean.TRUE.equals(request.getDeleteOutboundImage())) {
+        if (request.isDeleteOutboundImage()) {
             route.setOutboundImageData(null);
             route.setOutboundImageContentType(null);
             route.setOutboundImageUrl(null);
@@ -207,7 +231,7 @@ public class RouteService implements CrudOperations<RouteReqDto, RouteResDto, Lo
         // Si no se envía imagen nueva y no se elimina, mantener la existente
 
         // Verificar si se debe eliminar imagen return
-        if (Boolean.TRUE.equals(request.getDeleteReturnImage())) {
+        if (request.isDeleteReturnImage()) {
             route.setReturnImageData(null);
             route.setReturnImageContentType(null);
             route.setReturnImageUrl(null);
@@ -225,6 +249,14 @@ public class RouteService implements CrudOperations<RouteReqDto, RouteResDto, Lo
             }
         }
         // Si no se envía imagen nueva y no se elimina, mantener la existente
+
+        // ✅ VALIDACIÓN: No permitir eliminar ninguna imagen, ambas son obligatorias
+        if (request.isDeleteOutboundImage()) {
+            throw new BadRequestException("No se puede eliminar la imagen de ida. Ambas imágenes son obligatorias para la ruta.");
+        }
+        if (request.isDeleteReturnImage()) {
+            throw new BadRequestException("No se puede eliminar la imagen de vuelta. Ambas imágenes son obligatorias para la ruta.");
+        }
 
         RouteDomain updated = routeRepository.saveAndFlush(route);
 
@@ -343,18 +375,28 @@ public class RouteService implements CrudOperations<RouteReqDto, RouteResDto, Lo
     }
 
     public CrudResponseDto<RouteDetailsResDto> findByIdType(Long id, String type) {
+        // Forzar recarga desde BD limpiando el contexto de persistencia
+        entityManager.clear();
+
         RouteDomain route = routeRepository.findById(id)
                 .orElseThrow(() -> new EntityNotFoundException("Ruta con id " + id + " no encontrada."));
 
         boolean needsUpdate = false;
 
-        // Generar URLs para imágenes existentes si no las tienen
+        // Generar URLs para imágenes existentes si no las tienen, o limpiar URLs si no hay datos
         if (route.getOutboundImageData() != null && (route.getOutboundImageUrl() == null || route.getOutboundImageUrl().isEmpty())) {
             route.setOutboundImageUrl(generateImageUrl(route.getId(), "outbound"));
             needsUpdate = true;
+        } else if (route.getOutboundImageData() == null && route.getOutboundImageUrl() != null) {
+            route.setOutboundImageUrl(null);
+            needsUpdate = true;
         }
+
         if (route.getReturnImageData() != null && (route.getReturnImageUrl() == null || route.getReturnImageUrl().isEmpty())) {
             route.setReturnImageUrl(generateImageUrl(route.getId(), "return"));
+            needsUpdate = true;
+        } else if (route.getReturnImageData() == null && route.getReturnImageUrl() != null) {
+            route.setReturnImageUrl(null);
             needsUpdate = true;
         }
 

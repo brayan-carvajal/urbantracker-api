@@ -38,6 +38,7 @@ public class SecurityConfig {
                                 "/api/v1/public/**",
                                 "/api/v1/vehicles/*/images/**",
                                 "/api/v1/routes/*/images/**",
+                                "/api/v1/route/*/images/**",
                                 "/api/v1/route/images/**",
                                 "/api/mqtt/**",
                                 "/swagger-ui/**",

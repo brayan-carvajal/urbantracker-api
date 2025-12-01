@@ -4,6 +4,10 @@ import com.sena.urbantracker.routes.application.dto.request.RouteReqDto;
 import com.sena.urbantracker.routes.application.dto.response.RouteDetailsResDto;
 import com.sena.urbantracker.routes.application.dto.response.RouteResDto;
 import com.sena.urbantracker.routes.application.service.RouteService;
+import com.sena.urbantracker.routes.domain.entity.RouteDomain;
+import com.sena.urbantracker.routes.domain.repository.RouteRepository;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
 import com.sena.urbantracker.shared.application.dto.CrudResponseDto;
 import com.sena.urbantracker.shared.infrastructure.controller.BaseController;
 import com.sena.urbantracker.shared.domain.enums.EntityType;
@@ -32,10 +36,15 @@ import java.util.Optional;
 public class RouteController extends BaseController<RouteReqDto, RouteResDto, Long> {
 
     private final RouteService routeService;
+    private final RouteRepository routeRepository;
 
-    public RouteController(ServiceFactory serviceFactory, RouteService routeService) {
+    @PersistenceContext
+    private EntityManager entityManager;
+
+    public RouteController(ServiceFactory serviceFactory, RouteService routeService, RouteRepository routeRepository) {
         super(serviceFactory, EntityType.ROUTE, RouteReqDto.class, RouteResDto.class);
         this.routeService = routeService;
+        this.routeRepository = routeRepository;
     }
 
     @PostMapping("/with-images")
@@ -84,6 +93,51 @@ public class RouteController extends BaseController<RouteReqDto, RouteResDto, Lo
         } catch (Exception e) {
             return ResponseEntity.internalServerError()
                 .body("Error durante la migración: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Servir imágenes de rutas desde la base de datos
+     */
+    @GetMapping("/{id}/images/{imageType}")
+    public ResponseEntity<byte[]> getRouteImage(@PathVariable Long id, @PathVariable String imageType) {
+        try {
+            Optional<RouteDomain> routeOpt = routeRepository.findById(id);
+
+            if (routeOpt.isEmpty()) {
+                return ResponseEntity.notFound().build();
+            }
+
+            RouteDomain route = routeOpt.get();
+            byte[] imageData = null;
+            String contentType = null;
+
+            // Determinar qué imagen servir
+            if ("outbound".equals(imageType)) {
+                imageData = route.getOutboundImageData();
+                contentType = route.getOutboundImageContentType();
+            } else if ("return".equals(imageType)) {
+                imageData = route.getReturnImageData();
+                contentType = route.getReturnImageContentType();
+            } else {
+                return ResponseEntity.badRequest().build();
+            }
+
+            if (imageData == null || imageData.length == 0) {
+                return ResponseEntity.notFound().build();
+            }
+
+            // Usar content type por defecto si no está especificado
+            if (contentType == null || contentType.isEmpty()) {
+                contentType = "image/jpeg";
+            }
+
+            return ResponseEntity.ok()
+                    .contentType(MediaType.parseMediaType(contentType))
+                    .body(imageData);
+
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().build();
         }
     }
 
