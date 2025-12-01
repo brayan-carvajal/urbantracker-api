@@ -187,7 +187,7 @@ public class RouteService implements CrudOperations<RouteReqDto, RouteResDto, Lo
         Integer numberRouteInt = Integer.valueOf(request.getNumberRoute());
 
         // Verificar si se debe eliminar imagen outbound
-        if ("true".equals(request.getDeleteOutboundImage())) {
+        if (Boolean.TRUE.equals(request.getDeleteOutboundImage())) {
             route.setOutboundImageData(null);
             route.setOutboundImageContentType(null);
             route.setOutboundImageUrl(null);
@@ -207,7 +207,7 @@ public class RouteService implements CrudOperations<RouteReqDto, RouteResDto, Lo
         // Si no se envía imagen nueva y no se elimina, mantener la existente
 
         // Verificar si se debe eliminar imagen return
-        if ("true".equals(request.getDeleteReturnImage())) {
+        if (Boolean.TRUE.equals(request.getDeleteReturnImage())) {
             route.setReturnImageData(null);
             route.setReturnImageContentType(null);
             route.setReturnImageUrl(null);
@@ -518,3 +518,4 @@ public class RouteService implements CrudOperations<RouteReqDto, RouteResDto, Lo
     }
 
 }
+
