@@ -17,8 +17,31 @@ public class VehicleMapper {
         dto.setYear(entity.getYear());
         dto.setColor(entity.getColor());
         dto.setPassengerCapacity(entity.getPassengerCapacity());
-        dto.setStatus(entity.getStatus().name());
-        // company and vehicleType need to be fetched separately or set to null
+        dto.setStatus(entity.getStatus() != null ? entity.getStatus().name() : null);
+
+        // Set image availability flags (don't send BLOB data in list responses)
+        dto.setHasOutboundImage(entity.getOutboundImageData() != null && entity.getOutboundImageData().length > 0);
+
+        // Only set BLOB data if explicitly requested (e.g., for image serving endpoint)
+        // For list operations, these will remain null to avoid performance issues
+        dto.setOutboundImageData(null);
+        dto.setOutboundImageContentType(null);
+        dto.setReturnImageData(null);
+        dto.setReturnImageContentType(null);
+
+        dto.setOutboundImageUrl(entity.getOutboundImageUrl());
+        dto.setReturnImageUrl(entity.getReturnImageUrl());
+        dto.setInService(entity.isInService());
+
+        // Set company and vehicleType IDs for frontend compatibility
+        if (entity.getCompany() != null) {
+            dto.setCompanyId(entity.getCompany().getId());
+        }
+        if (entity.getVehicleType() != null) {
+            dto.setVehicleTypeId(entity.getVehicleType().getId());
+        }
+
+        // Keep full objects as null to avoid lazy loading issues
         dto.setCompany(null);
         dto.setVehicleType(null);
         return dto;
@@ -37,7 +60,8 @@ public class VehicleMapper {
                 .passengerCapacity(dto.getPassengerCapacity())
                 .status(dto.getStatus() != null ? dto.getStatus() : VehicleStatusType.ACTIVE)
                 .inService(dto.isInService())
-                .active(true)
+                .outboundImageUrl(dto.getOutboundImageUrl())
+                .returnImageUrl(dto.getReturnImageUrl())
                 .build();
     }
 }

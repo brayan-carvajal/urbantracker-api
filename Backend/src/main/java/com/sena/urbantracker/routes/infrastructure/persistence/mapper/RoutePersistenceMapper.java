@@ -12,11 +12,18 @@ public class RoutePersistenceMapper {
                 .numberRoute(domain.getNumberRoute())
                 .description(domain.getDescription())
                 .totalDistance(domain.getTotalDistance())
+                .outboundImageData(domain.getOutboundImageData())
+                .outboundImageContentType(domain.getOutboundImageContentType())
+                .returnImageData(domain.getReturnImageData())
+                .returnImageContentType(domain.getReturnImageContentType())
                 .outboundImageUrl(domain.getOutboundImageUrl())
                 .returnImageUrl(domain.getReturnImageUrl())
                 .active(domain.getActive())
                 .createdAt(domain.getCreatedAt())
                 .updatedAt(domain.getUpdatedAt())
+                .company(domain.getCompanyId() != null ?
+                    com.sena.urbantracker.users.infrastructure.persistence.model.CompanyModel.builder()
+                        .id(domain.getCompanyId()).build() : null)
                 .build();
     }
 
@@ -27,11 +34,16 @@ public class RoutePersistenceMapper {
                 .numberRoute(model.getNumberRoute())
                 .description(model.getDescription())
                 .totalDistance(model.getTotalDistance())
+                .outboundImageData(model.getOutboundImageData())
+                .outboundImageContentType(model.getOutboundImageContentType())
+                .returnImageData(model.getReturnImageData())
+                .returnImageContentType(model.getReturnImageContentType())
                 .outboundImageUrl(model.getOutboundImageUrl())
                 .returnImageUrl(model.getReturnImageUrl())
                 .active(model.getActive())
                 .createdAt(model.getCreatedAt())
                 .updatedAt(model.getUpdatedAt())
+                .companyId(model.getCompany() != null ? model.getCompany().getId() : null)
                 .build();
     }
 }

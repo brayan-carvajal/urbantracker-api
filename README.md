@@ -147,4 +147,8 @@ Backend/
 
 ---
 
+<<<<<<< HEAD
 📌 *Este API proporciona toda la funcionalidad backend para las aplicaciones Web-Client y Web-Admin de UrbanTracker. Asegúrate de que esté ejecutándose correctamente antes de iniciar las aplicaciones frontend.*
+=======
+📌 *Este API proporciona toda la funcionalidad backend para las aplicaciones Web-Client y Web-Admin de UrbanTracker. Asegúrate de que esté ejecutándose correctamente antes de iniciar las aplicaciones frontend.*
+>>>>>>> 82c933a101d5ce17b52bc162d49d28f1e2b41056

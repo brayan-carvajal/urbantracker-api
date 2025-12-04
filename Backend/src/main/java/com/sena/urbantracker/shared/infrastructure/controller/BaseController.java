@@ -53,7 +53,15 @@ public abstract class BaseController<DReq, DRes, ID> {
      * @return El servicio CRUD para este controlador
      */
     protected CrudOperations<DReq, DRes, ID> getService() {
-        return serviceFactory.getService(entityType, requestDtoClass);
+        try {
+            log.debug("Getting service for entity: {}", entityType);
+            CrudOperations<DReq, DRes, ID> service = serviceFactory.getService(entityType, requestDtoClass);
+            log.debug("Service obtained: {}", service.getClass().getSimpleName());
+            return service;
+        } catch (Exception e) {
+            log.error("Failed to get service for entity: {}", entityType, e);
+            throw new RuntimeException("Failed to get service for entity: " + entityType, e);
+        }
     }
 
     @PostMapping
@@ -75,10 +83,21 @@ public abstract class BaseController<DReq, DRes, ID> {
 
     @GetMapping
     public ResponseEntity<CrudResponseDto<List<DRes>>> findAll() {
-        CrudOperations<DReq, DRes, ID> service = getService();
-        CrudResponseDto<List<DRes>> response = service.findAll();
-
-        return ResponseEntity.ok(response);
+        try {
+            log.info("FindAll called for entity: {}", entityType);
+            CrudOperations<DReq, DRes, ID> service = getService();
+            CrudResponseDto<List<DRes>> response = service.findAll();
+            
+            log.info("FindAll response for {}: {} vehicles found", entityType, 
+                response.getData() != null ? response.getData().size() : 0);
+            
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            log.error("Error in findAll for entity: {}", entityType, e);
+            CrudResponseDto<List<DRes>> errorResponse = CrudResponseDto.error(
+                "Error al obtener los datos: " + e.getMessage());
+            return ResponseEntity.internalServerError().body(errorResponse);
+        }
     }
 
     @PutMapping("/{id}")
