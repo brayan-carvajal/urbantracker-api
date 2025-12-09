@@ -19,7 +19,23 @@ public class VehicleResDto extends ABaseResDto {
     private String color;
     private Integer passengerCapacity;
     private CompanyResDto company;
+    private Long companyId; // For frontend compatibility
     private String licencePlate;
     private VehicleTypeResDto vehicleType;
+    private Long vehicleTypeId; // For frontend compatibility
     private String status;
+
+    // Image availability flags (for list views - don't send BLOB data)
+    private boolean hasOutboundImage;
+
+    // BLOB data for images (only populated when specifically requested)
+    private byte[] outboundImageData;
+    private String outboundImageContentType;
+    private byte[] returnImageData;
+    private String returnImageContentType;
+
+    // Legacy URL fields for backward compatibility
+    private String outboundImageUrl;
+    private String returnImageUrl;
+    private boolean inService;
 }

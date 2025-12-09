@@ -21,7 +21,10 @@ public class VehiclePersistenceMapper {
                 .passengerCapacity(domain.getPassengerCapacity())
                 .status(domain.getStatus())
                 .inService(domain.isInService())
-                .active(domain.getActive())
+                .outboundImageData(domain.getOutboundImageData())
+                .outboundImageContentType(domain.getOutboundImageContentType())
+                .outboundImageUrl(domain.getOutboundImageUrl())
+                .returnImageUrl(domain.getReturnImageUrl())
                 .createdAt(domain.getCreatedAt())
                 .updatedAt(domain.getUpdatedAt())
                 .build();
@@ -41,7 +44,10 @@ public class VehiclePersistenceMapper {
                 .passengerCapacity(model.getPassengerCapacity())
                 .status(model.getStatus())
                 .inService(model.isInService())
-                .active(model.getActive())
+                .outboundImageData(model.getOutboundImageData())
+                .outboundImageContentType(model.getOutboundImageContentType())
+                .outboundImageUrl(model.getOutboundImageUrl())
+                .returnImageUrl(model.getReturnImageUrl())
                 .createdAt(model.getCreatedAt())
                 .updatedAt(model.getUpdatedAt())
                 .build();

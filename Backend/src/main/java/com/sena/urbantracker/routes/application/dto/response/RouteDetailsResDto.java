@@ -31,4 +31,9 @@ public class RouteDetailsResDto extends ABaseResDto {
     private String outboundImageUrl;
 
     private String returnImageUrl;
+
+    // Image availability flags
+    private boolean hasOutboundImage;
+
+    private boolean hasReturnImage;
 }

@@ -32,6 +32,11 @@ public class VehicleRepositoryImpl implements VehicleRepository {
     }
 
     @Override
+    public Optional<VehicleDomain> findByIdWithRelations(Long id) {
+        return jpaRepository.findByIdWithRelations(id).map(VehiclePersistenceMapper::toDomain);
+    }
+
+    @Override
     public List<VehicleDomain> findAll() {
         return jpaRepository.findAll()
                 .stream()

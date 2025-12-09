@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sena.urbantracker.monitoring.application.dto.request.TrackingReqDto;
+import com.sena.urbantracker.parking.application.service.ParkingDetectionService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.integration.annotation.ServiceActivator;
@@ -21,6 +22,9 @@ public class MqttMessageListener {
     @Autowired
     private ObjectMapper objectMapper;
 
+    @Autowired
+    private ParkingDetectionService parkingDetectionService;
+
     @ServiceActivator(inputChannel = "mqttInputChannel")
     public void handleIncomingMessage(Message<?> message) throws JsonProcessingException {
         String topic = (String) message.getHeaders().get("mqtt_receivedTopic");
@@ -36,8 +40,31 @@ public class MqttMessageListener {
                 TrackingReqDto telemetry = objectMapper.readValue(payload, TrackingReqDto.class);
                 messagingTemplate.convertAndSend("/topic/route/" + routeId + "/telemetry", telemetry);
                 log.info("📡 Telemetría enviada vía WebSocket para routeId: {}", routeId);
+
+                // Procesar ubicación para detección de estacionamiento
+                parkingDetectionService.processLocationUpdate(telemetry);
             } catch (Exception e) {
                 log.error("Error parseando payload MQTT para routeId: {}", routeId, e);
+            }
+        } else if (topic.startsWith("vehicles/")) {
+            String[] parts = topic.split("/");
+            String vehicleId = parts[1];
+
+            try {
+                TrackingReqDto telemetry = objectMapper.readValue(payload, TrackingReqDto.class);
+                // Si tiene routeId, enviar a route, sino a vehicles
+                if (telemetry.getRouteId() != null) {
+                    messagingTemplate.convertAndSend("/topic/route/" + telemetry.getRouteId() + "/telemetry", telemetry);
+                    log.info("📡 Telemetría enviada vía WebSocket para routeId: {} desde vehicles", telemetry.getRouteId());
+                } else {
+                    messagingTemplate.convertAndSend("/topic/vehicles/" + vehicleId + "/telemetry", telemetry);
+                    log.info("📡 Telemetría enviada vía WebSocket para vehicleId: {} (sin ruta)", vehicleId);
+                }
+
+                // Procesar ubicación para detección de estacionamiento
+                parkingDetectionService.processLocationUpdate(telemetry);
+            } catch (Exception e) {
+                log.error("Error parseando payload MQTT para vehicleId: {}", vehicleId, e);
             }
         }
     }

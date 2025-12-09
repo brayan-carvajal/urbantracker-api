@@ -35,11 +35,13 @@ public class RouteReqDto extends ABaseReqDto {
     @NotBlank(message = "Los puntos de ruta son obligatorios")
     private String waypoints;
 
-    @NotNull
     private MultipartFile outboundImage;
 
-    @NotNull
     private MultipartFile returnImage;
+
+    private boolean deleteOutboundImage;
+
+    private boolean deleteReturnImage;
 
     @Null
     private String outboundImageUrl;

@@ -2,6 +2,7 @@ package com.sena.urbantracker.shared.application.service;
 
 import com.sena.urbantracker.routes.application.service.RouteScheduleService;
 import com.sena.urbantracker.routes.application.service.RouteTrajectoryService;
+import com.sena.urbantracker.users.application.service.DriverScheduleService;
 import com.sena.urbantracker.shared.infrastructure.exception.FactoryException;
 import com.sena.urbantracker.shared.domain.enums.EntityType;
 import com.sena.urbantracker.shared.domain.repository.CrudOperations;
@@ -60,6 +61,9 @@ public class ServiceFactoryImpl implements ServiceFactory {
     private final RouteWaypointService routeWaypointService;
     private final RouteScheduleService routeScheduleService;
     private final RouteTrajectoryService routeTrajectoryService;
+    
+    // Driver Schedules
+    private final DriverScheduleService driverScheduleService;
 
     private Map<EntityType, CrudOperations<?, ?, ?>> crudServices;
 
@@ -83,6 +87,9 @@ public class ServiceFactoryImpl implements ServiceFactory {
         map.put(EntityType.ROUTE_WAYPOINT, routeWaypointService);
         map.put(EntityType.ROUTE_SCHEDULE, routeScheduleService);
         map.put(EntityType.ROUTE_TRAJECTORY, routeTrajectoryService);
+        
+        // Driver Schedules
+        map.put(EntityType.DRIVER_SCHEDULE, driverScheduleService);
 
         // Hacemos el mapa inmutable para evitar modificaciones en runtime
         crudServices = Collections.unmodifiableMap(map);

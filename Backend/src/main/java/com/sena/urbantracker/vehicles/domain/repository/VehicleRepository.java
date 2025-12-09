@@ -11,6 +11,8 @@ public interface VehicleRepository {
 
     Optional<VehicleDomain> findById(Long id);
 
+    Optional<VehicleDomain> findByIdWithRelations(Long id);
+
     List<VehicleDomain> findAll();
 
     void deleteById(Long id);
