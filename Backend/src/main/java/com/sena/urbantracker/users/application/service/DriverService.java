@@ -16,6 +16,7 @@ import com.sena.urbantracker.users.domain.entity.UserProfileDomain;
 import com.sena.urbantracker.users.domain.repository.DriverRepository;
 import com.sena.urbantracker.users.domain.repository.UserProfileRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,6 +26,7 @@ import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class DriverService implements CrudOperations<DriverReqDto, DriverResDto, Long> {
 
     private final DriverRepository driverRepository;
@@ -85,23 +87,48 @@ public class DriverService implements CrudOperations<DriverReqDto, DriverResDto,
 
     @Override
     public CrudResponseDto<Optional<DriverResDto>> findById(Long id) {
+        log.debug("Buscando conductor con ID: {}", id);
+        
         DriverDomain driver = driverRepository.findById(id)
                 .orElseThrow(() -> new EntityNotFoundException("Conductor con id " + id + " no encontrado."));
 
+        // CORRECCIÓN: Manejar el caso donde el perfil no existe
         UserProfileDomain profile = userProfileRepository.findByUserId(driver.getUser().getId())
-                .orElseThrow(() -> new EntityNotFoundException("Perfil de usuario no encontrado"));
+                .orElseGet(() -> {
+                    log.warn("Perfil no encontrado para conductor {}, creando perfil por defecto", id);
+                    return UserProfileDomain.builder()
+                            .firstName("Conductor")
+                            .lastName("Usuario")
+                            .email("conductor" + driver.getUser().getId() + "@urbantracker.com")
+                            .phone(null)
+                            .user(driver.getUser())
+                            .active(true)
+                            .build();
+                });
 
         return CrudResponseDto.success(Optional.of(DriverMapper.toDto(driver, profile)), "Conductor encontrado");
     }
 
     @Override
     public CrudResponseDto<List<DriverResDto>> findAll() {
+        log.debug("Buscando todos los conductores");
         List<DriverDomain> drivers = driverRepository.findAll();
         List<DriverResDto> dtos = drivers.stream().map(driver -> {
             UserProfileDomain profile = userProfileRepository.findByUserId(driver.getUser().getId())
-                    .orElseThrow(() -> new EntityNotFoundException("Perfil de usuario no encontrado"));
+                    .orElseGet(() -> {
+                        log.warn("Perfil no encontrado para conductor {}, creando perfil por defecto", driver.getId());
+                        return UserProfileDomain.builder()
+                                .firstName("Conductor")
+                                .lastName("Usuario")
+                                .email("conductor" + driver.getUser().getId() + "@urbantracker.com")
+                                .phone(null)
+                                .user(driver.getUser())
+                                .active(true)
+                                .build();
+                    });
             return DriverMapper.toDto(driver, profile);
         }).toList();
+        log.info("Se encontraron {} conductores", dtos.size());
         return CrudResponseDto.success(dtos, "Conductores encontrados");
     }
 
@@ -120,9 +147,15 @@ public class DriverService implements CrudOperations<DriverReqDto, DriverResDto,
                 .orElseThrow(() -> new EntityNotFoundException("Rol no encontrado"));
         user.setRole(role);
 
-        // Update profile
+        // Update profile or create if missing
         UserProfileDomain profile = userProfileRepository.findByUserId(user.getId())
-                .orElseThrow(() -> new EntityNotFoundException("Perfil de usuario no encontrado"));
+                .orElseGet(() -> {
+                    log.info("Perfil no encontrado para usuario {}, creando nuevo perfil", user.getId());
+                    return UserProfileDomain.builder()
+                            .user(user)
+                            .active(true)
+                            .build();
+                });
         profile.setFirstName(dto.getFirstName());
         profile.setLastName(dto.getLastName());
         profile.setEmail(dto.getEmail());
@@ -144,7 +177,17 @@ public class DriverService implements CrudOperations<DriverReqDto, DriverResDto,
 
         // Delete profile first
         UserProfileDomain profile = userProfileRepository.findByUserId(user.getId())
-                .orElseThrow(() -> new EntityNotFoundException("Perfil de usuario no encontrado"));
+                .orElseGet(() -> {
+                    log.warn("Perfil no encontrado para conductor {}, creando perfil por defecto", aLong);
+                    return UserProfileDomain.builder()
+                            .firstName("Conductor")
+                            .lastName("Usuario")
+                            .email("conductor" + user.getId() + "@urbantracker.com")
+                            .phone(null)
+                            .user(user)
+                            .active(true)
+                            .build();
+                });
         userProfileRepository.deleteById(profile.getId());
 
         // Delete driver (which cascades to user)
@@ -155,30 +198,54 @@ public class DriverService implements CrudOperations<DriverReqDto, DriverResDto,
 
     @Override
     public CrudResponseDto<DriverResDto> activateById(Long aLong) {
+        log.debug("Activando conductor con ID: {}", aLong);
+        
         DriverDomain driver = driverRepository.findById(aLong)
                 .orElseThrow(() -> new EntityNotFoundException("Conductor con id " + aLong + " no encontrado."));
 
         driver.setActive(true);
-        driverRepository.save(driver);
+        DriverDomain saved = driverRepository.save(driver);
 
         UserProfileDomain profile = userProfileRepository.findByUserId(driver.getUser().getId())
-                .orElseThrow(() -> new EntityNotFoundException("Perfil de usuario no encontrado"));
+                .orElseGet(() -> {
+                    log.warn("Perfil no encontrado para conductor {}, creando perfil por defecto", aLong);
+                    return UserProfileDomain.builder()
+                            .firstName("Conductor")
+                            .lastName("Usuario")
+                            .email("conductor" + driver.getUser().getId() + "@urbantracker.com")
+                            .phone(null)
+                            .user(driver.getUser())
+                            .active(true)
+                            .build();
+                });
 
-        return CrudResponseDto.success(DriverMapper.toDto(driver, profile), "Conductor activado correctamente");
+        return CrudResponseDto.success(DriverMapper.toDto(saved, profile), "Conductor activado correctamente");
     }
 
     @Override
     public CrudResponseDto<DriverResDto> deactivateById(Long aLong) {
+        log.debug("Desactivando conductor con ID: {}", aLong);
+        
         DriverDomain driver = driverRepository.findById(aLong)
                 .orElseThrow(() -> new EntityNotFoundException("Conductor con id " + aLong + " no encontrado."));
 
         driver.setActive(false);
-        driverRepository.save(driver);
+        DriverDomain saved = driverRepository.save(driver);
 
         UserProfileDomain profile = userProfileRepository.findByUserId(driver.getUser().getId())
-                .orElseThrow(() -> new EntityNotFoundException("Perfil de usuario no encontrado"));
+                .orElseGet(() -> {
+                    log.warn("Perfil no encontrado para conductor {}, creando perfil por defecto", aLong);
+                    return UserProfileDomain.builder()
+                            .firstName("Conductor")
+                            .lastName("Usuario")
+                            .email("conductor" + driver.getUser().getId() + "@urbantracker.com")
+                            .phone(null)
+                            .user(driver.getUser())
+                            .active(true)
+                            .build();
+                });
 
-        return CrudResponseDto.success(DriverMapper.toDto(driver, profile), "Conductor desactivado correctamente");
+        return CrudResponseDto.success(DriverMapper.toDto(saved, profile), "Conductor desactivado correctamente");
     }
 
     @Override

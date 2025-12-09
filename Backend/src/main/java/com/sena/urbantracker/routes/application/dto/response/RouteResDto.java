@@ -32,4 +32,9 @@ public class RouteResDto extends ABaseResDto {
     private String outboundImageUrl;
 
     private String returnImageUrl;
+
+    // Image availability flags (don't send BLOB data in list responses)
+    private boolean hasOutboundImage;
+
+    private boolean hasReturnImage;
 }

@@ -22,6 +22,7 @@ import java.util.stream.Collectors;
 @Slf4j
 @Service
 @RequiredArgsConstructor
+@org.springframework.transaction.annotation.Transactional
 public class RouteScheduleService implements CrudOperations<RouteScheduleReqDto, RouteScheduleResDto, Long> {
 
     private final RouteScheduleRepository routeScheduleRepository;

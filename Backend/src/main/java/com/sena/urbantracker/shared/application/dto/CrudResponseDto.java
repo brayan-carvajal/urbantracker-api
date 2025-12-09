@@ -63,6 +63,16 @@ public class CrudResponseDto<T> {
         return response;
     }
 
+    public static <T> CrudResponseDto<T> error(String message) {
+        CrudResponseDto<T> response = new CrudResponseDto<>();
+        response.setSuccess(false);
+        response.setMessage(message);
+        response.setOperation(null);
+        response.setEntityType(null);
+        response.setTimestamp(LocalDateTime.now());
+        return response;
+    }
+
     public static <T> CrudResponseDto<T> validationError(List<String> validationErrors,
                                                           OperationType operation, String entityType) {
         CrudResponseDto<T> response = new CrudResponseDto<>();

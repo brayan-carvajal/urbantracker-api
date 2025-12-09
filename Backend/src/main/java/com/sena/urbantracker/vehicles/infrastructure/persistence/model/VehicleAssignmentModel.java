@@ -1,6 +1,6 @@
 package com.sena.urbantracker.vehicles.infrastructure.persistence.model;
 
-import com.sena.urbantracker.shared.application.dto.BaseEntity;
+import com.sena.urbantracker.shared.infrastructure.persistence.model.BaseEntity;
 import com.sena.urbantracker.users.infrastructure.persistence.model.DriverModel;
 import com.sena.urbantracker.vehicles.domain.valueobject.AssigmentStatusType;
 import jakarta.persistence.*;

@@ -2,81 +2,327 @@ pipeline {
   agent any
 
   environment {
-    REGISTRY = "registry.com"
-    IMAGE    = "${REGISTRY}/premium/back"
+    IMAGE_BASE = 'backend'
+    NETWORK_PREFIX = 'myproject-net'
   }
 
   stages {
-    stage('Checkout') {
+
+    stage('Permisos workspace') {
       steps {
-        checkout scm
+        sh '''
+          chmod -R 777 $WORKSPACE || true
+        '''
       }
     }
 
-    stage('Build & Test') {
+    // =====================================================
+    // 1️⃣ Leer entorno desde .env (raíz)
+    // =====================================================
+    stage('Leer entorno desde .env') {
       steps {
         script {
-          docker.image('maven:3.9-eclipse-temurin-17').inside {
-            dir('Backend') {
-              sh 'mvn -B -DskipTests=false test'
+          if (!fileExists('.env')) {
+            error ".env no encontrado en la raíz. Debe contener: ENVIRONMENT=<develop|staging|prod>"
+          }
+          sh '''
+            ENVIRONMENT=$(grep -E '^ENVIRONMENT=' .env | cut -d'=' -f2 | tr -d '\\r\\n')
+:...skipping...
+pipeline {
+  agent any
+
+  environment {
+    IMAGE_BASE = 'backend'
+    NETWORK_PREFIX = 'myproject-net'
+  }
+
+  stages {
+
+    stage('Permisos workspace') {
+      steps {
+        sh '''
+          chmod -R 777 $WORKSPACE || true
+        '''
+      }
+    }
+
+    // =====================================================
+    // 1️⃣ Leer entorno desde .env (raíz)
+    // =====================================================
+    stage('Leer entorno desde .env') {
+      steps {
+        script {
+          if (!fileExists('.env')) {
+            error ".env no encontrado en la raíz. Debe contener: ENVIRONMENT=<develop|staging|prod>"
+          }
+          sh '''
+            ENVIRONMENT=$(grep -E '^ENVIRONMENT=' .env | cut -d'=' -f2 | tr -d '\\r\\n')
+            echo "ENVIRONMENT=$ENVIRONMENT" > env.properties
+            echo "ENV_DIR=Backend/Devops/$ENVIRONMENT" >> env.properties
+            echo "COMPOSE_FILE=Backend/Devops/$ENVIRONMENT/docker-compose.yml" >> env.properties
+          '''
+          def props = readProperties file: 'env.properties'
+          env.ENVIRONMENT = props['ENVIRONMENT']
+
+          echo "✅ Entorno detectado: ${env.ENVIRONMENT}"
+        }
+      }
+    }
+
+    // =====================================================
+    // 2️⃣ Verificar herramientas necesarias
+ ESCOD
+pipeline {
+  agent any
+
+  environment {
+    IMAGE_BASE = 'backend'
+    NETWORK_PREFIX = 'myproject-net'
+  }
+
+  stages {
+
+    stage('Permisos workspace') {
+      steps {
+        sh '''
+          chmod -R 777 $WORKSPACE || true
+        '''
+      }
+    }
+
+    // =====================================================
+    // 1️⃣ Leer entorno desde .env (raíz)
+    // =====================================================
+    stage('Leer entorno desde .env') {
+      steps {
+        script {
+          if (!fileExists('.env')) {
+            error ".env no encontrado en la raíz. Debe contener: ENVIRONMENT=<develop|staging|prod>"
+          }
+          sh '''
+            ENVIRONMENT=$(grep -E '^ENVIRONMENT=' .env | cut -d'=' -f2 | tr -d '\\r\\n')
+            echo "ENVIRONMENT=$ENVIRONMENT" > env.properties
+            echo "ENV_DIR=Backend/Devops/$ENVIRONMENT" >> env.properties
+            echo "COMPOSE_FILE=Backend/Devops/$ENVIRONMENT/docker-compose.yml" >> env.properties
+          '''
+          def props = readProperties file: 'env.properties'
+          env.ENVIRONMENT = props['ENVIRONMENT']
+
+          echo "✅ Entorno detectado: ${env.ENVIRONMENT}"
+        }
+      }
+    }
+
+    // =====================================================
+    // 2️⃣ Verificar herramientas necesarias
+    // =====================================================
+    stage('Verificar herramientas') {
+      steps {
+        sh '''
+          echo "🔍 Verificando herramientas..."
+          docker --version
+          mvn --version
+        '''
+      }
+    }
+
+    // =====================================================
+    // 3️⃣ Compilar backend (maven inside container)
+    // =====================================================
+    stage('Compilar Backend') {
+      steps {
+        dir('Backend') {
+          script {
+            echo "📦 Compilando Backend con maven..."
+            docker.image('maven:3.9.4-eclipse-temurin-17').inside {
+              sh '''
+                mvn -B clean package -DskipTests
+              '''
             }
           }
         }
       }
     }
 
-    stage('Package') {
+    // =====================================================
+    // 4️⃣ Construir imagen Docker del backend
+    // =====================================================
+    stage('Construir imagen Docker') {
       steps {
-        script {
-          docker.image('maven:3.9-eclipse-temurin-17').inside {
-            dir('Backend') {
-              sh 'mvn -B -DskipTests package'
-            }
+        dir('Backend') {
+          script {
+            echo "🐳 Construyendo imagen Docker del backend..."
+
+            def commit = sh(script: "git rev-parse --short HEAD", returnStdout: true).trim()
+            env.IMAGE_TAG = "${IMAGE_BASE}:${env.ENVIRONMENT}-${commit}"
+
+            // Verificar que el jar existe
+            sh '''
+              JARFILE=$(ls target/*.jar 2>/dev/null | head -n 1)
+              if [ -z "$JARFILE" ]; then
+                echo "❌ No se encontró jar en Backend/target"
+                exit 1
+              fi
+              echo "✅ JAR encontrado: $JARFILE"
+
+              mkdir -p Devops/develop
+              cp ${JARFILE} Devops/develop/app.jar
+            '''
+
+            // construir imagen
+            sh """
+              docker build --no-cache -t ${env.IMAGE_TAG} -f Devops/develop/Dockerfile.app Devops/develop
+            """
+            echo "✅ Imagen creada: ${env.IMAGE_TAG}"
           }
         }
       }
     }
 
-    stage('Docker Build & Push') {
+    // =====================================================
+    // 5️⃣ Preparar red y servicios
+    // =====================================================
+    stage('Preparar servicios') {
       steps {
-        withCredentials([usernamePassword(credentialsId: 'docker-registry-creds', usernameVariable: 'USER', passwordVariable: 'PASS')]) {
-          sh """
-            echo "$PASS" | docker login ${REGISTRY} -u "$USER" --password-stdin
-            docker build -t ${IMAGE}:${GIT_COMMIT} Backend/
-            docker push ${IMAGE}:${GIT_COMMIT}
-          """
+        script {
+          def netName = "${NETWORK_PREFIX}-${env.ENVIRONMENT}"
+          echo "🌐 Creando red ${netName} ..."
+          sh "docker network create ${netName} || echo '✅ Red ya existe'"
+
+          if (env.ENVIRONMENT != 'prod') {
+            echo "🗄️ Iniciando PostgreSQL..."
+            sh """
+              docker run -d \\
+                --name urbantracker-postgres-${env.ENVIRONMENT} \\
+                --network ${netName} \\
+                -e POSTGRES_DB=urbantracker_${env.ENVIRONMENT} \\
+                -e POSTGRES_USER=postgres \\
+                -e POSTGRES_PASSWORD=develop1234 \\
+                -p 5433:5432 \\
+                --restart unless-stopped \\
+                postgres:15
+            """
+
+            echo "📡 Iniciando Mosquitto MQTT..."
+            sh """
+              docker run -d \\
+                --name urbantracker-mosquitto-${env.ENVIRONMENT} \\
+                --network ${netName} \\
+                -p 1883:1883 \\
+                -p 9001:9001 \\
+                --restart unless-stopped \\
+                eclipse-mosquitto:2
+            """
+          } else {
+            echo "🛑 Ambiente prod: saltando servicios locales"
+          }
         }
       }
     }
 
-    stage('Move Tag by branch') {
+    // =====================================================
+    // 6️⃣ Desplegar backend
+    // =====================================================
+    stage('Desplegar Backend') {
       steps {
         script {
-          def envTag = (env.BRANCH_NAME == 'develop') ? 'dev'
-                       : (env.BRANCH_NAME.startsWith('release/')) ? 'qa'
-                       : (env.BRANCH_NAME == 'staging') ? 'staging'
-                       : (env.BRANCH_NAME == 'main') ? 'prod'
-                       : null
+          if (env.ENVIRONMENT == 'prod') {
+            echo "🚀 Despliegue remoto en producción"
+          } else {
+            script {
+              echo "🚀 Desplegando backend local (${env.ENVIRONMENT})"
 
-          if (envTag) {
-            withCredentials([usernamePassword(credentialsId: 'docker-registry-creds', usernameVariable: 'USER', passwordVariable: 'PASS')]) {
+              def networkName = "${NETWORK_PREFIX}-${env.ENVIRONMENT}"
+              def containerName = "urbantracker-backend-${env.ENVIRONMENT}"
+
               sh """
-                docker tag  ${IMAGE}:${GIT_COMMIT} ${IMAGE}:${envTag}
-                echo "$PASS" | docker login ${REGISTRY} -u "$USER" --password-stdin
-                docker push ${IMAGE}:${envTag}
+                # Detener contenedor anterior si existe
+                docker stop ${containerName} || true
+                docker rm ${containerName} || true
+
+                sleep 3
+
+                # Ejecutar contenedor backend
+                docker run -d \\
+                  --name ${containerName} \\
+                  --network ${networkName} \\
+                  -p 8081:8080 \\
+                  -e SPRING_PROFILES_ACTIVE=${env.ENVIRONMENT} \\
+                  --restart unless-stopped \\
+                  ${env.IMAGE_TAG}
+
+                echo "✅ Contenedor backend iniciado"
               """
             }
-          } else {
-            echo "Rama ${env.BRANCH_NAME} sin tag móvil"
           }
+        }
+      }
+    }
+
+    // =====================================================
+    // 7️⃣ Verificar estado del contenedor
+    // =====================================================
+    stage('Verificar Estado') {
+      steps {
+        script {
+          echo "🔎 Verificando estado del backend..."
+
+          // Esperar y mostrar información de diagnóstico
+          sh '''
+            sleep 20
+            echo "⏱️ Esperando 20 segundos para inicialización..."
+
+            echo "📊 Estado de contenedores:"
+            docker ps -a --filter "name=urbantracker-backend"
+
+            echo "📋 Logs del backend (últimas 20 líneas):"
+            docker logs urbantracker-backend-develop --tail 20 || true
+
+            echo "🔍 Intentando health check..."
+            curl -sS --connect-timeout 5 --max-time 10 http://localhost:8081/actuator/health && {
+              echo "✅ Backend respondiendo correctamente"
+            } || {
+              echo "⚠️ Backend no responde en puerto 8081"
+              echo "🔍 Intentando puerto 8080..."
+              curl -sS --connect-timeout 5 --max-time 10 http://localhost:8080/actuator/health && {
+                echo "✅ Backend respondiendo en puerto 8080"
+              } || {
+                echo "⚠️ Backend no está respondiendo aún - puede estar iniciando"
+              }
+            }
+          '''
         }
       }
     }
   }
 
   post {
+    success {
+      echo "🎉 Deploy completado para ${env.ENVIRONMENT}"
+      echo "📊 Servicios disponibles:"
+      echo "   - Backend: http://localhost:8081"
+    }
+    failure {
+      echo "💥 Error durante deploy"
+      sh '''
+        docker logs urbantracker-backend-develop --tail 20 2>/dev/null || true
+      '''
+    }
     always {
-      sh 'docker logout || true'
+      script {
+        if (env.ENVIRONMENT == 'develop') {
+          echo "🧹 Limpiando contenedores..."
+          sh """
+            docker stop urbantracker-backend-${env.ENVIRONMENT} || true
+            docker rm urbantracker-backend-${env.ENVIRONMENT} || true
+            docker stop urbantracker-postgres-${env.ENVIRONMENT} || true
+            docker rm urbantracker-postgres-${env.ENVIRONMENT} || true
+            docker stop urbantracker-mosquitto-${env.ENVIRONMENT} || true
+            docker rm urbantracker-mosquitto-${env.ENVIRONMENT} || true
+            docker network rm ${NETWORK_PREFIX}-${env.ENVIRONMENT} || true
+          """
+        }
+      }
     }
   }
 }
