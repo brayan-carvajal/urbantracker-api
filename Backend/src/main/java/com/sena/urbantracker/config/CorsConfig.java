@@ -30,7 +30,7 @@ public class CorsConfig {
                 "null" // Para herramientas como IntelliJ IDEA, Postman, cURL
         ));
         config.setAllowedMethods(Arrays.asList("GET", "POST", "DELETE", "PUT", "PATCH", "OPTIONS"));
-        config.setAllowedHeaders(Arrays.asList("Authorization", "Content-Type",  "Link", "X-Total-Count"));
+        config.setAllowedHeaders(Arrays.asList("*"));
         config.setAllowCredentials(true); // Importante si se está usando cookies o Authorization header
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
