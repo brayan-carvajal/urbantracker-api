@@ -7,7 +7,81 @@ pipeline {
   }
 
   stages {
-    
+
+    stage('Permisos workspace') {
+      steps {
+        sh '''
+          chmod -R 777 $WORKSPACE || true
+        '''
+      }
+    }
+
+    // =====================================================
+    // 1️⃣ Leer entorno desde .env (raíz)
+    // =====================================================
+    stage('Leer entorno desde .env') {
+      steps {
+        script {
+          if (!fileExists('.env')) {
+            error ".env no encontrado en la raíz. Debe contener: ENVIRONMENT=<develop|staging|prod>"
+          }
+          sh '''
+            ENVIRONMENT=$(grep -E '^ENVIRONMENT=' .env | cut -d'=' -f2 | tr -d '\\r\\n')
+:...skipping...
+pipeline {
+  agent any
+
+  environment {
+    IMAGE_BASE = 'backend'
+    NETWORK_PREFIX = 'myproject-net'
+  }
+
+  stages {
+
+    stage('Permisos workspace') {
+      steps {
+        sh '''
+          chmod -R 777 $WORKSPACE || true
+        '''
+      }
+    }
+
+    // =====================================================
+    // 1️⃣ Leer entorno desde .env (raíz)
+    // =====================================================
+    stage('Leer entorno desde .env') {
+      steps {
+        script {
+          if (!fileExists('.env')) {
+            error ".env no encontrado en la raíz. Debe contener: ENVIRONMENT=<develop|staging|prod>"
+          }
+          sh '''
+            ENVIRONMENT=$(grep -E '^ENVIRONMENT=' .env | cut -d'=' -f2 | tr -d '\\r\\n')
+            echo "ENVIRONMENT=$ENVIRONMENT" > env.properties
+            echo "ENV_DIR=Backend/Devops/$ENVIRONMENT" >> env.properties
+            echo "COMPOSE_FILE=Backend/Devops/$ENVIRONMENT/docker-compose.yml" >> env.properties
+          '''
+          def props = readProperties file: 'env.properties'
+          env.ENVIRONMENT = props['ENVIRONMENT']
+
+          echo "✅ Entorno detectado: ${env.ENVIRONMENT}"
+        }
+      }
+    }
+
+    // =====================================================
+    // 2️⃣ Verificar herramientas necesarias
+ ESCOD
+pipeline {
+  agent any
+
+  environment {
+    IMAGE_BASE = 'backend'
+    NETWORK_PREFIX = 'myproject-net'
+  }
+
+  stages {
+
     stage('Permisos workspace') {
       steps {
         sh '''
@@ -78,10 +152,10 @@ pipeline {
         dir('Backend') {
           script {
             echo "🐳 Construyendo imagen Docker del backend..."
-            
+
             def commit = sh(script: "git rev-parse --short HEAD", returnStdout: true).trim()
             env.IMAGE_TAG = "${IMAGE_BASE}:${env.ENVIRONMENT}-${commit}"
-            
+
             // Verificar que el jar existe
             sh '''
               JARFILE=$(ls target/*.jar 2>/dev/null | head -n 1)
@@ -90,11 +164,11 @@ pipeline {
                 exit 1
               fi
               echo "✅ JAR encontrado: $JARFILE"
-              
+
               mkdir -p Devops/develop
               cp ${JARFILE} Devops/develop/app.jar
             '''
-            
+
             // construir imagen
             sh """
               docker build --no-cache -t ${env.IMAGE_TAG} -f Devops/develop/Dockerfile.app Devops/develop
@@ -157,17 +231,17 @@ pipeline {
           } else {
             script {
               echo "🚀 Desplegando backend local (${env.ENVIRONMENT})"
-              
+
               def networkName = "${NETWORK_PREFIX}-${env.ENVIRONMENT}"
               def containerName = "urbantracker-backend-${env.ENVIRONMENT}"
-              
+
               sh """
                 # Detener contenedor anterior si existe
                 docker stop ${containerName} || true
                 docker rm ${containerName} || true
-                
+
                 sleep 3
-                
+
                 # Ejecutar contenedor backend
                 docker run -d \\
                   --name ${containerName} \\
@@ -176,7 +250,7 @@ pipeline {
                   -e SPRING_PROFILES_ACTIVE=${env.ENVIRONMENT} \\
                   --restart unless-stopped \\
                   ${env.IMAGE_TAG}
-                
+
                 echo "✅ Contenedor backend iniciado"
               """
             }
@@ -192,18 +266,18 @@ pipeline {
       steps {
         script {
           echo "🔎 Verificando estado del backend..."
-          
+
           // Esperar y mostrar información de diagnóstico
           sh '''
             sleep 20
             echo "⏱️ Esperando 20 segundos para inicialización..."
-            
+
             echo "📊 Estado de contenedores:"
             docker ps -a --filter "name=urbantracker-backend"
-            
+
             echo "📋 Logs del backend (últimas 20 líneas):"
             docker logs urbantracker-backend-develop --tail 20 || true
-            
+
             echo "🔍 Intentando health check..."
             curl -sS --connect-timeout 5 --max-time 10 http://localhost:8081/actuator/health && {
               echo "✅ Backend respondiendo correctamente"
