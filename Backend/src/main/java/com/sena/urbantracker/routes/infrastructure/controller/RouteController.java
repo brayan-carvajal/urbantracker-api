@@ -4,6 +4,10 @@ import com.sena.urbantracker.routes.application.dto.request.RouteReqDto;
 import com.sena.urbantracker.routes.application.dto.response.RouteDetailsResDto;
 import com.sena.urbantracker.routes.application.dto.response.RouteResDto;
 import com.sena.urbantracker.routes.application.service.RouteService;
+import com.sena.urbantracker.routes.domain.entity.RouteDomain;
+import com.sena.urbantracker.routes.domain.repository.RouteRepository;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
 import com.sena.urbantracker.shared.application.dto.CrudResponseDto;
 import com.sena.urbantracker.shared.infrastructure.controller.BaseController;
 import com.sena.urbantracker.shared.domain.enums.EntityType;
@@ -17,7 +21,14 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.core.io.Resource;
+import org.springframework.core.io.FileSystemResource;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.Optional;
 
 @RestController
@@ -25,10 +36,15 @@ import java.util.Optional;
 public class RouteController extends BaseController<RouteReqDto, RouteResDto, Long> {
 
     private final RouteService routeService;
+    private final RouteRepository routeRepository;
 
-    public RouteController(ServiceFactory serviceFactory, RouteService routeService) {
+    @PersistenceContext
+    private EntityManager entityManager;
+
+    public RouteController(ServiceFactory serviceFactory, RouteService routeService, RouteRepository routeRepository) {
         super(serviceFactory, EntityType.ROUTE, RouteReqDto.class, RouteResDto.class);
         this.routeService = routeService;
+        this.routeRepository = routeRepository;
     }
 
     @PostMapping("/with-images")
@@ -49,6 +65,106 @@ public class RouteController extends BaseController<RouteReqDto, RouteResDto, Lo
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<CrudResponseDto<RouteDetailsResDto>> viewEdit(@PathVariable Long id, @PathVariable String type) throws BadRequestException {
         return ResponseEntity.ok(routeService.findByIdType(id, type));
+    }
+
+    /**
+     * Migrar URLs de imágenes para rutas existentes
+     */
+    @PostMapping("/migrate-image-urls")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<CrudResponseDto<String>> migrateImageUrls() {
+        try {
+            routeService.updateExistingImageUrls();
+            return ResponseEntity.ok(CrudResponseDto.success("URLs de imágenes migradas exitosamente", "Migración completada"));
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError()
+                .body(CrudResponseDto.error("Error durante la migración: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * Endpoint público para migrar URLs (temporal, quitar en producción)
+     */
+    @GetMapping("/migrate-image-urls-public")
+    public ResponseEntity<String> migrateImageUrlsPublic() {
+        try {
+            routeService.updateExistingImageUrls();
+            return ResponseEntity.ok("URLs de imágenes migradas exitosamente");
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError()
+                .body("Error durante la migración: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Servir imágenes de rutas desde la base de datos
+     */
+    @GetMapping("/{id}/images/{imageType}")
+    public ResponseEntity<byte[]> getRouteImage(@PathVariable Long id, @PathVariable String imageType) {
+        try {
+            Optional<RouteDomain> routeOpt = routeRepository.findById(id);
+
+            if (routeOpt.isEmpty()) {
+                return ResponseEntity.notFound().build();
+            }
+
+            RouteDomain route = routeOpt.get();
+            byte[] imageData = null;
+            String contentType = null;
+
+            // Determinar qué imagen servir
+            if ("outbound".equals(imageType)) {
+                imageData = route.getOutboundImageData();
+                contentType = route.getOutboundImageContentType();
+            } else if ("return".equals(imageType)) {
+                imageData = route.getReturnImageData();
+                contentType = route.getReturnImageContentType();
+            } else {
+                return ResponseEntity.badRequest().build();
+            }
+
+            if (imageData == null || imageData.length == 0) {
+                return ResponseEntity.notFound().build();
+            }
+
+            // Usar content type por defecto si no está especificado
+            if (contentType == null || contentType.isEmpty()) {
+                contentType = "image/jpeg";
+            }
+
+            return ResponseEntity.ok()
+                    .contentType(MediaType.parseMediaType(contentType))
+                    .body(imageData);
+
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().build();
+        }
+    }
+
+    /**
+     * Servir imágenes de rutas (para compatibilidad con URLs existentes)
+     */
+    @GetMapping("/images/{filename:.+}")
+    public ResponseEntity<Resource> serveRouteImage(@PathVariable String filename) {
+        try {
+            Path filePath = Paths.get("src/main/resources/static/images/routes", filename);
+            Resource resource = new FileSystemResource(filePath);
+
+            if (resource.exists() && resource.isReadable()) {
+                String contentType = Files.probeContentType(filePath);
+                if (contentType == null) {
+                    contentType = "application/octet-stream";
+                }
+
+                return ResponseEntity.ok()
+                    .contentType(MediaType.parseMediaType(contentType))
+                    .body(resource);
+            } else {
+                return ResponseEntity.notFound().build();
+            }
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().build();
+        }
     }
 }
 

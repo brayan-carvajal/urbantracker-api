@@ -2,7 +2,7 @@ package com.sena.urbantracker.vehicles.infrastructure.persistence.model;
 
 import com.sena.urbantracker.monitoring.infrastructure.persistence.model.TrackingModel;
 import com.sena.urbantracker.routes.infrastructure.persistence.model.RouteTrajectoryModel;
-import com.sena.urbantracker.shared.application.dto.BaseEntity;
+import com.sena.urbantracker.shared.infrastructure.persistence.model.BaseEntity;
 import com.sena.urbantracker.users.infrastructure.persistence.model.CompanyModel;
 import com.sena.urbantracker.vehicles.domain.valueobject.VehicleStatusType;
 import jakarta.persistence.*;
@@ -53,6 +53,20 @@ public class VehicleModel extends BaseEntity {
     @Column(name = "in_service", nullable = false)
     @Builder.Default
     private boolean inService = false;
+
+    @Lob
+    @Column(name = "outbound_image_data")
+    private byte[] outboundImageData;
+
+    @Column(name = "outbound_image_content_type", length = 100)
+    private String outboundImageContentType;
+
+    // Legacy URL fields for backward compatibility (can be removed later)
+    @Column(name = "outbound_image_url", length = 500)
+    private String outboundImageUrl;
+
+    @Column(name = "return_image_url", length = 500)
+    private String returnImageUrl;
 
     @OneToMany(mappedBy = "vehicle", cascade = CascadeType.ALL)
     private List<VehicleAssignmentModel> vehicleAssignments;

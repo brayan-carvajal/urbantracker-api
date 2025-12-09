@@ -1,4 +1,4 @@
-package com.sena.urbantracker.routes.application.service;
+ package com.sena.urbantracker.routes.application.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -20,10 +20,14 @@ import com.sena.urbantracker.shared.infrastructure.exception.EntityNotFoundExcep
 import com.sena.urbantracker.shared.application.dto.CrudResponseDto;
 import com.sena.urbantracker.shared.domain.repository.CrudOperations;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.coyote.BadRequestException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.beans.factory.annotation.Value;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -35,12 +39,25 @@ import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class RouteService implements CrudOperations<RouteReqDto, RouteResDto, Long> {
 
     private final RouteRepository routeRepository;
     private final RouteWaypointRepository routeWaypointRepository;
     private final ObjectMapper objectMapper;
     private final DynamicSubscriptionService dynamicSubscriptionService;
+
+    @PersistenceContext
+    private EntityManager entityManager;
+
+    @Value("${app.upload.base-url:http://localhost:8080}")
+    private String baseUrl;
+
+    @Value("${server.port:8080}")
+    private String serverPort;
+
+    @Value("${spring.profiles.active:}")
+    private String activeProfile;
 
     @Transactional(rollbackFor = BadRequestException.class)
     @Override
@@ -54,32 +71,77 @@ public class RouteService implements CrudOperations<RouteReqDto, RouteResDto, Lo
         List<RouteWaypointReqDto> waypointDtos = parseJson(request.getWaypoints());
 
         RouteDomain route = RouteMapper.toEntity(request);
-        String outboundImageUrl = saveImage(request.getOutboundImage(), numberRouteInt, "outbound");
-        String returnImageUrl = saveImage(request.getReturnImage(), numberRouteInt, "return");
-        route.setOutboundImageUrl(outboundImageUrl);
-        route.setReturnImageUrl(returnImageUrl);
+
+        // Manejar imágenes outbound
+        if (request.getOutboundImage() != null && !request.getOutboundImage().isEmpty()) {
+            try {
+                byte[] outboundImageData = request.getOutboundImage().getBytes();
+                String outboundContentType = request.getOutboundImage().getContentType();
+                route.setOutboundImageData(outboundImageData);
+                route.setOutboundImageContentType(outboundContentType);
+            } catch (IOException e) {
+                throw new RuntimeException("Error al procesar imagen de ida: " + e.getMessage());
+            }
+        }
+
+        // Manejar imágenes return
+        if (request.getReturnImage() != null && !request.getReturnImage().isEmpty()) {
+            try {
+                byte[] returnImageData = request.getReturnImage().getBytes();
+                String returnContentType = request.getReturnImage().getContentType();
+                route.setReturnImageData(returnImageData);
+                route.setReturnImageContentType(returnContentType);
+            } catch (IOException e) {
+                throw new RuntimeException("Error al procesar imagen de vuelta: " + e.getMessage());
+            }
+        }
+
+        // ✅ VALIDACIÓN: Ambas imágenes son obligatorias para crear una ruta
+        boolean hasOutboundImage = route.getOutboundImageData() != null && route.getOutboundImageData().length > 0;
+        boolean hasReturnImage = route.getReturnImageData() != null && route.getReturnImageData().length > 0;
+
+        if (!hasOutboundImage) {
+            throw new BadRequestException("La imagen de ida es obligatoria para la ruta.");
+        }
+        if (!hasReturnImage) {
+            throw new BadRequestException("La imagen de vuelta es obligatoria para la ruta.");
+        }
 
         // 1) Guarda la ruta y fuerza el INSERT si necesitas el ID ya mismo
         RouteDomain savedRoute = routeRepository.saveAndFlush(route); // <-- aquí "esperas" efectivamente
 
-        // 2) Mapea y guarda los waypoints con la FK a la ruta ya persistida
+        // 2) Generar URLs de imágenes ahora que tenemos el ID
+        boolean needsUpdate = false;
+        if (savedRoute.getOutboundImageData() != null) {
+            savedRoute.setOutboundImageUrl(generateImageUrl(savedRoute.getId(), "outbound"));
+            needsUpdate = true;
+        }
+        if (savedRoute.getReturnImageData() != null) {
+            savedRoute.setReturnImageUrl(generateImageUrl(savedRoute.getId(), "return"));
+            needsUpdate = true;
+        }
+
+        // 3) Guardar nuevamente con las URLs actualizadas si es necesario
+        final RouteDomain finalSavedRoute = needsUpdate ? routeRepository.saveAndFlush(savedRoute) : savedRoute;
+
+        // 4) Mapea y guarda los waypoints con la FK a la ruta ya persistida
         List<RouteWaypointDomain> waypoints = waypointDtos.stream()
                 .map(dto -> {
-                    RouteWaypointDomain e = RouteWaypointMapper.toEntity(dto, savedRoute.getId());
-                    e.setRoute(savedRoute);
+                    RouteWaypointDomain e = RouteWaypointMapper.toEntity(dto, finalSavedRoute.getId());
+                    e.setRoute(finalSavedRoute);
                     return e;
                 })
                 .toList();
 
         routeWaypointRepository.saveAll(waypoints);
 
-        // 3) crear el topic de la ruta usando el ID en lugar del número
-        String routeTopic = "route/" + savedRoute.getId();
+        // 5) crear el topic de la ruta usando el ID en lugar del número
+        String routeTopic = "route/" + finalSavedRoute.getId();
 
-        // 4) Suscribirse al topic de la ruta
+        // 6) Suscribirse al topic de la ruta
         dynamicSubscriptionService.subscribeToRouteTopic(routeTopic);
 
-        return CrudResponseDto.success(RouteMapper.toDto(savedRoute, waypoints.size()), "Ruta creada correctamente y suscrito al topic: " + routeTopic);
+        return CrudResponseDto.success(RouteMapper.toDto(finalSavedRoute, waypoints.size()), "Ruta creada correctamente y suscrito al topic: " + routeTopic);
     }
 
 
@@ -94,13 +156,43 @@ public class RouteService implements CrudOperations<RouteReqDto, RouteResDto, Lo
 
     @Override
     public CrudResponseDto<List<RouteResDto>> findAll() {
+        log.info("[RouteService] findAll called");
+
         List<RouteDomain> routes = routeRepository.findAll();
+        log.info("[RouteService] Found {} routes in database", routes.size());
         List<RouteResDto> routesDto = new ArrayList<>();
+
         for (RouteDomain route : routes) {
+            boolean needsUpdate = false;
+
+            // Generar URLs para imágenes existentes si no las tienen, o limpiar URLs si no hay datos
+            if (route.getOutboundImageData() != null && (route.getOutboundImageUrl() == null || route.getOutboundImageUrl().isEmpty())) {
+                route.setOutboundImageUrl(generateImageUrl(route.getId(), "outbound"));
+                needsUpdate = true;
+            } else if (route.getOutboundImageData() == null && route.getOutboundImageUrl() != null) {
+                route.setOutboundImageUrl(null);
+                needsUpdate = true;
+            }
+    
+            if (route.getReturnImageData() != null && (route.getReturnImageUrl() == null || route.getReturnImageUrl().isEmpty())) {
+                route.setReturnImageUrl(generateImageUrl(route.getId(), "return"));
+                needsUpdate = true;
+            } else if (route.getReturnImageData() == null && route.getReturnImageUrl() != null) {
+                route.setReturnImageUrl(null);
+                needsUpdate = true;
+            }
+
+            // Solo guardar si necesita actualización
+            if (needsUpdate) {
+                log.info("[RouteService] Updating route {} with image URLs", route.getId());
+                routeRepository.save(route);
+            }
+
             Integer numberWaypoints = routeWaypointRepository.countByTypeAndRoute("WAYPOINT", route);
             routesDto.add(RouteMapper.toDto(route, numberWaypoints));
         }
 
+        log.info("[RouteService] Returning {} routes to frontend", routesDto.size());
         return CrudResponseDto.success(routesDto, "Listado de rutas");
     }
 
@@ -118,17 +210,52 @@ public class RouteService implements CrudOperations<RouteReqDto, RouteResDto, Lo
         // Manejo condicional de imágenes
         Integer numberRouteInt = Integer.valueOf(request.getNumberRoute());
 
-        // Outbound image
-        if (request.getOutboundImage() != null && !request.getOutboundImage().isEmpty()) {
-            deleteIfExists(route.getOutboundImageUrl());
-            String newOutbound = saveImage(request.getOutboundImage(), numberRouteInt, "outbound");
-            route.setOutboundImageUrl(newOutbound);
+        // Verificar si se debe eliminar imagen outbound
+        if (request.isDeleteOutboundImage()) {
+            route.setOutboundImageData(null);
+            route.setOutboundImageContentType(null);
+            route.setOutboundImageUrl(null);
         }
-        // Return image
-        if (request.getReturnImage() != null && !request.getReturnImage().isEmpty()) {
-            deleteIfExists(route.getReturnImageUrl());
-            String newReturn = saveImage(request.getReturnImage(), numberRouteInt, "return");
-            route.setReturnImageUrl(newReturn);
+        // Outbound image - solo procesar si no se va a eliminar
+        else if (request.getOutboundImage() != null && !request.getOutboundImage().isEmpty()) {
+            try {
+                byte[] outboundImageData = request.getOutboundImage().getBytes();
+                String outboundContentType = request.getOutboundImage().getContentType();
+                route.setOutboundImageData(outboundImageData);
+                route.setOutboundImageContentType(outboundContentType);
+                route.setOutboundImageUrl(generateImageUrl(route.getId(), "outbound"));
+            } catch (IOException e) {
+                throw new RuntimeException("Error al procesar imagen de ida: " + e.getMessage());
+            }
+        }
+        // Si no se envía imagen nueva y no se elimina, mantener la existente
+
+        // Verificar si se debe eliminar imagen return
+        if (request.isDeleteReturnImage()) {
+            route.setReturnImageData(null);
+            route.setReturnImageContentType(null);
+            route.setReturnImageUrl(null);
+        }
+        // Return image - solo procesar si no se va a eliminar
+        else if (request.getReturnImage() != null && !request.getReturnImage().isEmpty()) {
+            try {
+                byte[] returnImageData = request.getReturnImage().getBytes();
+                String returnContentType = request.getReturnImage().getContentType();
+                route.setReturnImageData(returnImageData);
+                route.setReturnImageContentType(returnContentType);
+                route.setReturnImageUrl(generateImageUrl(route.getId(), "return"));
+            } catch (IOException e) {
+                throw new RuntimeException("Error al procesar imagen de vuelta: " + e.getMessage());
+            }
+        }
+        // Si no se envía imagen nueva y no se elimina, mantener la existente
+
+        // ✅ VALIDACIÓN: No permitir eliminar ninguna imagen, ambas son obligatorias
+        if (request.isDeleteOutboundImage()) {
+            throw new BadRequestException("No se puede eliminar la imagen de ida. Ambas imágenes son obligatorias para la ruta.");
+        }
+        if (request.isDeleteReturnImage()) {
+            throw new BadRequestException("No se puede eliminar la imagen de vuelta. Ambas imágenes son obligatorias para la ruta.");
         }
 
         RouteDomain updated = routeRepository.saveAndFlush(route);
@@ -155,9 +282,7 @@ public class RouteService implements CrudOperations<RouteReqDto, RouteResDto, Lo
         RouteDomain route = routeRepository.findById(id)
                 .orElseThrow(() -> new EntityNotFoundException("Ruta no encontrada."));
 
-        deleteIfExists(route.getOutboundImageUrl());
-        deleteIfExists(route.getReturnImageUrl());
-
+        // Las imágenes se eliminan automáticamente al eliminar la entidad (cascade)
         routeRepository.deleteById(id);
         return CrudResponseDto.success(RouteMapper.toDto(null, 0), "Ruta eliminada correctamente");
     }
@@ -185,9 +310,101 @@ public class RouteService implements CrudOperations<RouteReqDto, RouteResDto, Lo
         return CrudResponseDto.success(routeRepository.existsById(id), "Verificación de existencia completada");
     }
 
+    /**
+     * Guardar imagen y retornar la URL (método público para controladores)
+     */
+    public String saveImage(MultipartFile file, Integer routeNumber, String type) {
+        return saveImageInternal(file, routeNumber, type);
+    }
+
+    /**
+     * Eliminar imagen de ruta (método público para controladores)
+     */
+    public void deleteImage(Long routeId, String imageType) throws IOException {
+        RouteDomain route = routeRepository.findById(routeId)
+                .orElseThrow(() -> new IllegalArgumentException("Ruta no encontrada"));
+
+        // Limpiar los datos de imagen y URL en la base de datos
+        if ("outbound".equals(imageType)) {
+            route.setOutboundImageData(null);
+            route.setOutboundImageContentType(null);
+            route.setOutboundImageUrl(null);
+        } else if ("return".equals(imageType)) {
+            route.setReturnImageData(null);
+            route.setReturnImageContentType(null);
+            route.setReturnImageUrl(null);
+        } else {
+            throw new IllegalArgumentException("Tipo de imagen inválido: " + imageType);
+        }
+
+        routeRepository.save(route);
+    }
+
+    /**
+     * Actualizar URLs de imágenes para rutas existentes (método de migración)
+     */
+    public void updateExistingImageUrls() {
+        List<RouteDomain> routes = routeRepository.findAll();
+        String imageBaseUrl = determineImageBaseUrl();
+
+        for (RouteDomain route : routes) {
+            boolean updated = false;
+
+            if (route.getOutboundImageUrl() != null && !route.getOutboundImageUrl().startsWith(imageBaseUrl)) {
+                // Extraer filename de la URL antigua
+                String filename = extractFilenameFromUrl(route.getOutboundImageUrl());
+                if (filename != null) {
+                    route.setOutboundImageUrl(imageBaseUrl + "/api/v1/routes/images/" + filename);
+                    updated = true;
+                }
+            }
+
+            if (route.getReturnImageUrl() != null && !route.getReturnImageUrl().startsWith(imageBaseUrl)) {
+                // Extraer filename de la URL antigua
+                String filename = extractFilenameFromUrl(route.getReturnImageUrl());
+                if (filename != null) {
+                    route.setReturnImageUrl(imageBaseUrl + "/api/v1/routes/images/" + filename);
+                    updated = true;
+                }
+            }
+
+            if (updated) {
+                routeRepository.save(route);
+            }
+        }
+    }
+
     public CrudResponseDto<RouteDetailsResDto> findByIdType(Long id, String type) {
+        // Forzar recarga desde BD limpiando el contexto de persistencia
+        entityManager.clear();
+
         RouteDomain route = routeRepository.findById(id)
                 .orElseThrow(() -> new EntityNotFoundException("Ruta con id " + id + " no encontrada."));
+
+        boolean needsUpdate = false;
+
+        // Generar URLs para imágenes existentes si no las tienen, o limpiar URLs si no hay datos
+        if (route.getOutboundImageData() != null && (route.getOutboundImageUrl() == null || route.getOutboundImageUrl().isEmpty())) {
+            route.setOutboundImageUrl(generateImageUrl(route.getId(), "outbound"));
+            needsUpdate = true;
+        } else if (route.getOutboundImageData() == null && route.getOutboundImageUrl() != null) {
+            route.setOutboundImageUrl(null);
+            needsUpdate = true;
+        }
+
+        if (route.getReturnImageData() != null && (route.getReturnImageUrl() == null || route.getReturnImageUrl().isEmpty())) {
+            route.setReturnImageUrl(generateImageUrl(route.getId(), "return"));
+            needsUpdate = true;
+        } else if (route.getReturnImageData() == null && route.getReturnImageUrl() != null) {
+            route.setReturnImageUrl(null);
+            needsUpdate = true;
+        }
+
+        // Guardar la ruta si necesita actualización
+        if (needsUpdate) {
+            routeRepository.save(route);
+        }
+
         List<RouteWaypointDomain> waypointDomains = routeWaypointRepository.findByRouteAndType(route, type);
 
         RouteDetailsResDto routeDetails = RouteMapper.toDtoDetail(route);
@@ -199,38 +416,126 @@ public class RouteService implements CrudOperations<RouteReqDto, RouteResDto, Lo
         return CrudResponseDto.success(routeDetails, "Ruta Lista");
     }
 
-    private String saveImage(MultipartFile file, Integer routeNumber, String type) {
+    private String saveImageInternal(MultipartFile file, Integer routeNumber, String type) {
         if (file == null || file.isEmpty()) {
             return null;
         }
-        try {
-            String originalFilename = file.getOriginalFilename();
-            String extension = originalFilename != null && originalFilename.contains(".")
-                    ? originalFilename.substring(originalFilename.lastIndexOf("."))
-                    : ".png";
-            String filename = "route_" + routeNumber + "_" + type + extension;
-            Path path = Paths.get("src/main/resources/static/images/routes/" + filename);
-            Files.createDirectories(path.getParent());
-            Files.write(path, file.getBytes());
-            return "/images/routes/" + filename;
-        } catch (IOException e) {
-            throw new RuntimeException("Error al guardar la imagen: " + e.getMessage());
+
+        // Validar tipo de archivo
+        String contentType = file.getContentType();
+        if (contentType == null || !contentType.startsWith("image/")) {
+            throw new IllegalArgumentException("Solo se permiten archivos de imagen");
         }
+
+        // Validar tamaño (5MB máximo)
+        if (file.getSize() > 5 * 1024 * 1024) {
+            throw new IllegalArgumentException("El archivo no puede ser mayor a 5MB");
+        }
+
+        try {
+            // Guardar datos de imagen en memoria para almacenar en BD
+            byte[] imageData = file.getBytes();
+
+            // Retornar los datos de imagen y content type como un objeto compuesto
+            // Para mantener compatibilidad con el código existente, retornamos null
+            // y manejamos el almacenamiento en los métodos create/update
+            return null;
+
+        } catch (IOException e) {
+            throw new RuntimeException("Error al procesar la imagen: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Extraer extensión del archivo
+     */
+    private String getFileExtension(String filename) {
+        if (filename == null || filename.lastIndexOf('.') == -1) {
+            return ".jpg"; // extensión por defecto
+        }
+        return filename.substring(filename.lastIndexOf('.'));
     }
 
     private void deleteIfExists(String publicUrl) {
         if (publicUrl == null || publicUrl.isBlank()) return;
+
         try {
-            // publicUrl esperado: "/images/routes/archivo.ext"
-            String relative = publicUrl.startsWith("/") ? publicUrl.substring(1) : publicUrl;
-            Path path = Paths.get("src/main/resources/static").resolve(relative);
-            if (Files.exists(path)) {
-                Files.delete(path);
+            // Extraer filename de cualquier formato de URL
+            String filename = extractFilenameFromUrl(publicUrl);
+            if (filename != null) {
+                Path path = Paths.get("src/main/resources/static/images/routes", filename);
+                if (Files.exists(path)) {
+                    Files.delete(path);
+                }
             }
         } catch (IOException e) {
-            // Decide si quieres fallar o solo registrar. Aquí lanzamos runtime para visibilidad.
-            throw new RuntimeException("Error al eliminar la imagen anterior: " + e.getMessage());
+            // Log the error but don't fail the operation
+            log.warn("Error deleting image file: {}", e.getMessage());
         }
+    }
+
+    /**
+     * Extraer nombre del archivo desde cualquier formato de URL
+     */
+    private String extractFilenameFromUrl(String imageUrl) {
+        if (imageUrl == null) return null;
+
+        // Manejar diferentes formatos de URL:
+        // - http://localhost:8080/api/v1/route/images/filename.ext
+        // - /api/v1/route/images/filename.ext
+        // - http://localhost:3000/api/v1/route/images/filename.ext
+
+        String[] parts = imageUrl.split("/");
+        return parts.length > 0 ? parts[parts.length - 1] : null;
+    }
+
+    /**
+     * Determinar la URL base para imágenes basándose en el entorno
+     */
+    private String determineImageBaseUrl() {
+        try {
+            // Detectar si estamos ejecutándonos en Docker
+            boolean isDocker = checkIfRunningInDocker();
+
+            if (isDocker) {
+                return "http://backend:8080";
+            }
+
+            // Para desarrollo, siempre usar localhost con el puerto del servidor
+            return "http://localhost:" + serverPort;
+
+        } catch (Exception e) {
+            return baseUrl;
+        }
+    }
+
+    /**
+     * Detectar si estamos ejecutándonos en Docker
+     */
+    private boolean checkIfRunningInDocker() {
+        // Verificar variables de entorno específicas de Docker
+        String dockerEnv = System.getenv("DOCKER_ENV");
+        if ("true".equals(dockerEnv)) {
+            return true;
+        }
+
+        // Verificar si existe el archivo .dockerenv (típico de Docker)
+        if (new java.io.File("/.dockerenv").exists()) {
+            return true;
+        }
+
+        // Verificar cgroup para detectar Docker
+        try {
+            String cgroup = new String(java.nio.file.Files.readAllBytes(
+                java.nio.file.Paths.get("/proc/1/cgroup")));
+            if (cgroup.contains("docker") || cgroup.contains("kubepods")) {
+                return true;
+            }
+        } catch (Exception e) {
+            // Ignorar errores al leer cgroup
+        }
+
+        return false;
     }
 
     private List<RouteWaypointReqDto> parseJson(String json) throws BadRequestException {
@@ -246,4 +551,13 @@ public class RouteService implements CrudOperations<RouteReqDto, RouteResDto, Lo
         return waypointDtos;
     }
 
+    /**
+     * Generar URL para acceder a una imagen de ruta
+     */
+    private String generateImageUrl(Long routeId, String imageType) {
+        String baseUrl = determineImageBaseUrl();
+        return baseUrl + "/api/v1/routes/" + routeId + "/images/" + imageType;
+    }
+
 }
+
