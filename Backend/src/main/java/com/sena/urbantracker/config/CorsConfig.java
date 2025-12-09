@@ -25,6 +25,8 @@ public class CorsConfig {
                 "http://backend:8080", // Para Docker Compose
                 "http://172.30.7.87:8081", // Metro desde tu celular (cambia por tu IP real)
                 "http://172.30.7.87:3000", // API accesible desde el celular
+                "http://3.138.184.230:3001",
+                "http://3.138.194.136:3002", // Para Docker Desktop
                 "null" // Para herramientas como IntelliJ IDEA, Postman, cURL
         ));
         config.setAllowedMethods(Arrays.asList("GET", "POST", "DELETE", "PUT", "PATCH", "OPTIONS"));
