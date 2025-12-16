@@ -17,6 +17,10 @@ public class CorsConfig {
 
         // Frontends permitidos
         config.setAllowedOrigins(Arrays.asList(
+                "http://localhost:3000",
+                "http://localhost:3001",
+                "http://localhost:3002",
+                "http://localhost:8080",
                 "http://3.138.184.230:3001",
                 "http://3.138.194.136:3002"
         ));
